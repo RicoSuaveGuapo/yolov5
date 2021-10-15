@@ -93,7 +93,8 @@ def exif_transpose(image):
 
 
 def create_dataloader(path, imgsz, batch_size, stride, single_cls=False, hyp=None, augment=False, cache=False, pad=0.0,
-                      rect=False, rank=-1, workers=8, image_weights=False, quad=False, prefix=''):
+                      rect=False, rank=-1, workers=8, image_weights=False, quad=False, prefix='', enable_seg=False,
+                      json_dir=None):
     # Make sure only the first process in DDP process the dataset first, and the following others can use the cache
     with torch_distributed_zero_first(rank):
         dataset = LoadImagesAndLabels(path, imgsz, batch_size,
@@ -105,7 +106,9 @@ def create_dataloader(path, imgsz, batch_size, stride, single_cls=False, hyp=Non
                                       stride=int(stride),
                                       pad=pad,
                                       image_weights=image_weights,
-                                      prefix=prefix)
+                                      prefix=prefix,
+                                      enable_seg=enable_seg,
+                                      json_dir=json_dir)
 
     batch_size = min(batch_size, len(dataset))
     nw = min([os.cpu_count(), batch_size if batch_size > 1 else 0, workers])  # number of workers
@@ -378,7 +381,7 @@ class LoadImagesAndLabels(Dataset):
     cache_version = 0.5  # dataset labels *.cache version
 
     def __init__(self, path, img_size=640, batch_size=16, augment=False, hyp=None, rect=False, image_weights=False,
-                 cache_images=False, single_cls=False, stride=32, pad=0.0, prefix=''):
+                 cache_images=False, single_cls=False, stride=32, pad=0.0, prefix='', enable_seg=False, json_dir=None):
         self.img_size = img_size
         self.augment = augment
         self.hyp = hyp
@@ -389,6 +392,7 @@ class LoadImagesAndLabels(Dataset):
         self.stride = stride
         self.path = path
         self.albumentations = Albumentations() if augment else None
+        self.enable_seg = enable_seg
 
         try:
             f = []  # image files
@@ -405,6 +409,7 @@ class LoadImagesAndLabels(Dataset):
                         # f += [p.parent / x.lstrip(os.sep) for x in t]  # local to global path (pathlib)
                 else:
                     raise Exception(f'{prefix}{p} does not exist')
+            # image paths
             self.img_files = sorted([x.replace('/', os.sep) for x in f if x.split('.')[-1].lower() in IMG_FORMATS])
             # self.img_files = sorted([x for x in f if x.suffix[1:].lower() in img_formats])  # pathlib
             assert self.img_files, f'{prefix}No images found'
@@ -437,6 +442,10 @@ class LoadImagesAndLabels(Dataset):
         self.shapes = np.array(shapes, dtype=np.float64)
         self.img_files = list(cache.keys())  # update
         self.label_files = img2label_paths(cache.keys())  # update
+        if self.enable_seg:
+            self.mask_files = json_paths2mask(self, json_dir)  # update to numpy array
+        else:
+            self.mask_files = None
         if single_cls:
             for x in self.labels:
                 x[:, 0] = 0
@@ -533,12 +542,6 @@ class LoadImagesAndLabels(Dataset):
     def __len__(self):
         return len(self.img_files)
 
-    # def __iter__(self):
-    #     self.count = -1
-    #     print('ran dataset iter')
-    #     #self.shuffled_vector = np.random.permutation(self.nF) if self.augment else np.arange(self.nF)
-    #     return self
-
     def __getitem__(self, index):
         index = self.indices[index]  # linear, shuffled, or image_weights
 
@@ -555,7 +558,13 @@ class LoadImagesAndLabels(Dataset):
 
         else:
             # Load image
-            img, (h0, w0), (h, w) = load_image(self, index)
+            img, (h0, w0), (h, w) = load_image(self, index)  # im, hw_original, hw_resized
+
+            # Load mask
+            if self.enable_seg:
+                ori_mask = self.mask_files[index]
+                mask = resize_mask(self, ori_mask, output_size=(h, w))
+                mask = torch.from_numpy(mask)
 
             # Letterbox
             shape = self.batch_shapes[self.batch[index]] if self.rect else self.img_size  # final letterboxed shape
@@ -609,14 +618,14 @@ class LoadImagesAndLabels(Dataset):
         img = img.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
         img = np.ascontiguousarray(img)
 
-        return torch.from_numpy(img), labels_out, self.img_files[index], shapes
+        return torch.from_numpy(img), labels_out, self.img_files[index], shapes, mask
 
     @staticmethod
     def collate_fn(batch):
-        img, label, path, shapes = zip(*batch)  # transposed
+        img, label, path, shapes, mask = zip(*batch)  # transposed
         for i, l in enumerate(label):
             l[:, 0] = i  # add target image index for build_targets()
-        return torch.stack(img, 0), torch.cat(label, 0), path, shapes
+        return torch.stack(img, 0), torch.cat(label, 0), path, shapes, torch.stack(mask, 0)
 
     @staticmethod
     def collate_fn4(batch):
@@ -646,6 +655,52 @@ class LoadImagesAndLabels(Dataset):
 
 
 # Ancillary functions --------------------------------------------------------------------------------------------------
+def json_paths2mask(self, json_dir: str):
+    '''
+    Now only support polygon json input
+    '''
+    assert os.path.isdir(json_dir), 'json_dir must be directory'
+    json_paths = [os.path.join(json_dir, json) for json in os.listdir(json_dir) if os.path.basename(json).find('json')]
+    json_paths.sort()
+    assert len(json_paths) != 0, 'there is no json in json_dir'
+
+    masks = []
+    for json_path in json_paths:
+        with open(json_path) as f:
+            annotation = json.load(f)
+        shape_list = annotation['shapes']
+        image_h = int(annotation['imageHeight'])
+        image_w = int(annotation['imageWidth'])
+        size = (image_h, image_w)
+        stack_mask = np.zeros(size)
+        for shape in shape_list:
+            mask = np.zeros(size)
+            points = shape['points']  # [[x1, y1], [x2, y2], [x3, y3], ...]
+            poly = np.array(points).astype(np.int32)  # change type since cv2.fillPoly needs
+            mask = cv2.fillPoly(mask.astype(np.int32), [poly], 1)
+            mask = mask.astype(np.uint8)
+            stack_mask += mask
+        masks.append(np.where(stack_mask >= 1, 1, 0))
+
+    # for sanity check
+    # print(json_paths[0])
+    # cv2.imwrite('mask.jpg', masks[0] * 255)
+    return masks
+
+def resize_mask(self, mask, output_size: tuple):
+    '''
+    output_size: format should be (h, w)
+    '''
+    h, w = output_size
+    r = max(mask.shape) / max(h, w)
+    assert len(mask.shape) == 2, 'mask dim is not correct'
+    mask = mask.astype(np.float32)  # in order to cv2.resize to work
+    output_mask = cv2.resize(mask, (w, h), interpolation=cv2.INTER_AREA if r < 1 else cv2.INTER_LINEAR)
+    output_mask = np.where(output_mask > 0, 1, 0)  # since resize will have non-binary values
+
+    return output_mask
+
+
 def load_image(self, i):
     # loads 1 image from dataset index 'i', returns im, original hw, resized hw
     im = self.imgs[i]
