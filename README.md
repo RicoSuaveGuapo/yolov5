@@ -5,14 +5,27 @@
 4. Metric
 
 ### Code Snippet
-* Preprocess data: example
-```python gt_preprocess.py --ori_dir /usr/AI/defect_data/green_crop --output_dir /usr/AI/defect_data/defect_seg_dataset --check_dir /usr/AI/defect_data/checker```
+* Preprocess data:
+jarvis
+```
+python gt_preprocess.py --ori_dir /usr/AI/defect_data/green_crop --output_dir /usr/AI/defect_data/defect_seg_dataset --check_dir /usr/AI/defect_data/checker
+```
+
+mcut
+```
+python gt_preprocess.py --ori_dir /nfs/Workspace/defect_data/green_crop --output_dir /nfs/Workspace/defect_data/defect_seg_dataset --check_dir /nfs/Workspace/defect_data/checker
+```
+
 
 * Training
     * for mcut:
-    ```python train.py --enable_seg True --json_dir ```
+    ```
+    python train.py --enable_seg True --json_dir /nfs/Workspace/defect_data/green_crop/annotations
+    ```
     * for jarvis:
-    ```python train.py --enable_seg True --json_dir /usr/AI/defect_data/green_crop/annotations/```
+    ```
+    python train.py --enable_seg True --json_dir /usr/AI/defect_data/green_crop/annotations/
+    ```
 
 ## 1. Dataloader
 ### Process
