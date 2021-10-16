@@ -82,7 +82,7 @@ class Detect(nn.Module):
 
 
 class Model(nn.Module):
-    def __init__(self, cfg='yolov5s.yaml', ch=3, nc=None, anchors=None):  # model, input channels, number of classes
+    def __init__(self, cfg='yolov5s.yaml', ch=3, nc=None, anchors=None, enable_seg=False):  # model, input channels, number of classes
         super().__init__()
         if isinstance(cfg, dict):
             self.yaml = cfg  # model dict
@@ -100,16 +100,22 @@ class Model(nn.Module):
         if anchors:
             LOGGER.info(f'Overriding model.yaml anchors with anchors={anchors}')
             self.yaml['anchors'] = round(anchors)  # override yaml value
-        self.model, self.save = parse_model(deepcopy(self.yaml), ch=[ch])  # model, savelist
+        self.model, self.save = parse_model(deepcopy(self.yaml), ch=[ch], enable_seg=enable_seg)  # model, savelist
         self.names = [str(i) for i in range(self.yaml['nc'])]  # default names
         self.inplace = self.yaml.get('inplace', True)
+        self.enable_seg = enable_seg
 
         # Build strides, anchors
-        m = self.model[-1]  # Detect()
+        if self.enable_seg:
+            m = self.model[-2]  # Detect is the 2nd last in seg yaml
+            assert isinstance(m, Detect), 'I set the seg module in the end, if not check model yaml'
+        else:
+            m = self.model[-1]  # Detect()
         if isinstance(m, Detect):
             s = 256  # 2x min stride
             m.inplace = self.inplace
-            m.stride = torch.tensor([s / x.shape[-2] for x in self.forward(torch.zeros(1, ch, s, s))])  # forward
+            m.stride = torch.tensor([s / x.shape[-2] for x in self.forward(torch.zeros(1, ch, s, s))[0]])  # forward
+            # modify above since if enable_seg is True, then there will be seg output
             m.anchors /= m.stride.view(-1, 1, 1)
             check_anchor_order(m)
             self.stride = m.stride
@@ -142,6 +148,10 @@ class Model(nn.Module):
     def _forward_once(self, x, profile=False, visualize=False):
         y, dt = [], []  # outputs
         for m in self.model:
+            if isinstance(m, ProtoNet):
+                proto_in = y[m.f]
+                proto_out = m(proto_in)
+                continue
             if m.f != -1:  # if not from previous layer
                 x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]  # from earlier layers
             if profile:
@@ -150,7 +160,10 @@ class Model(nn.Module):
             y.append(x if m.i in self.save else None)  # save output
             if visualize:
                 feature_visualization(x, m.type, m.i, save_dir=visualize)
-        return x
+        if self.enable_seg:
+            return x, proto_out
+        else:
+            return x
 
     def _descale_pred(self, p, flips, scale, img_size):
         # de-scale predictions following augmented inference (inverse operation)
@@ -196,7 +209,10 @@ class Model(nn.Module):
     def _initialize_biases(self, cf=None):  # initialize biases into Detect(), cf is class frequency
         # https://arxiv.org/abs/1708.02002 section 3.3
         # cf = torch.bincount(torch.tensor(np.concatenate(dataset.labels, 0)[:, 0]).long(), minlength=nc) + 1.
-        m = self.model[-1]  # Detect() module
+        if self.enable_seg:
+            m = self.model[-2]  # Detect() module
+        else:
+            m = self.model[-1]  # Detect() module
         for mi, s in zip(m.m, m.stride):  # from
             b = mi.bias.view(m.na, -1)  # conv.bias(255) to (3,85)
             b.data[:, 4] += math.log(8 / (640 / s) ** 2)  # obj (8 objects per 640 image)
@@ -204,7 +220,10 @@ class Model(nn.Module):
             mi.bias = torch.nn.Parameter(b.view(-1), requires_grad=True)
 
     def _print_biases(self):
-        m = self.model[-1]  # Detect() module
+        if self.enable_seg:
+            m = self.model[-2]  # Detect() module
+        else:
+            m = self.model[-1]  # Detect() module
         for mi in m.m:  # from
             b = mi.bias.detach().view(m.na, -1).T  # conv.bias(255) to (3,85)
             LOGGER.info(
@@ -227,7 +246,8 @@ class Model(nn.Module):
 
     def autoshape(self):  # add AutoShape module
         LOGGER.info('Adding AutoShape... ')
-        m = AutoShape(self)  # wrap model
+        breakpoint()
+        m = AutoShape(self, self.enable_seg)  # wrap model
         copy_attr(m, self, include=('yaml', 'nc', 'hyp', 'names', 'stride'), exclude=())  # copy attributes
         return m
 
@@ -246,14 +266,25 @@ class Model(nn.Module):
         return self
 
 
-def parse_model(d, ch):  # model_dict, input_channels(3)
+def parse_model(d, ch, enable_seg=False):  # model_dict, input_channels(3)
     LOGGER.info('\n%3s%18s%3s%10s  %-40s%-30s' % ('', 'from', 'n', 'params', 'module', 'arguments'))
     anchors, nc, gd, gw = d['anchors'], d['nc'], d['depth_multiple'], d['width_multiple']
     na = (len(anchors[0]) // 2) if isinstance(anchors, list) else anchors  # number of anchors
     no = na * (nc + 5)  # number of outputs = anchors * (classes + 5)
 
     layers, save, c2 = [], [], ch[-1]  # layers, savelist, ch out
-    for i, (f, n, m, args) in enumerate(d['backbone'] + d['head']):  # from, number, module, args
+    if enable_seg:
+        try:
+            module_list = d['backbone'] + d['head'] + d['mask']
+        except KeyError as error:
+            LOGGER.error(error)
+            LOGGER.info('\nYou enable the segmentation without giving the corresponding model yaml')
+            LOGGER.info('try yolov5s_seg.yaml under models folder\n')
+            raise
+    else:
+        module_list = d['backbone'] + d['head']
+
+    for i, (f, n, m, args) in enumerate(module_list):  # from, number, module, args
         m = eval(m) if isinstance(m, str) else m  # eval strings
         for j, a in enumerate(args):
             try:
@@ -263,12 +294,16 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
 
         n = n_ = max(round(n * gd), 1) if n > 1 else n  # depth gain
         if m in [Conv, GhostConv, Bottleneck, GhostBottleneck, SPP, SPPF, DWConv, MixConv2d, Focus, CrossConv,
-                 BottleneckCSP, C3, C3TR, C3SPP, C3Ghost]:
+                 BottleneckCSP, C3, C3TR, C3SPP, C3Ghost, ProtoNet]:
             c1, c2 = ch[f], args[0]
-            if c2 != no:  # if not output
+            if c2 != no and not (m is ProtoNet):  # if not output and not ProtoNet
                 c2 = make_divisible(c2 * gw, 8)
 
-            args = [c1, c2, *args[1:]]
+            if m is not ProtoNet:
+                args = [c1, c2, *args[1:]]
+            else:
+                # the seg module doesn't need extra arg
+                args = [c1]
             if m in [BottleneckCSP, C3, C3TR, C3Ghost]:
                 args.insert(2, n)  # number of repeats
                 n = 1

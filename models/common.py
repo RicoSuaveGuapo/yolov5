@@ -8,6 +8,7 @@ import math
 import warnings
 from copy import copy
 from pathlib import Path
+from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
@@ -140,15 +141,19 @@ class C3(nn.Module):
 class ProtoNet(nn.Module):
     def __init__(self, c1, channels=[128, 64, 1], scale_factor=2):
         super().__init__()
-        _c = int(256 * e)
-        self.c3 = C3(c1, _c)
         self.upsample = nn.Upsample(scale_factor=scale_factor, mode='bilinear', align_corners=False)
-        self.dwc = DWConv(_c, output_dim)
+        self.protonet = nn.Sequential(
+            OrderedDict([
+                ('c3_1', C3(c1, channels[0])),  # 128, h/8, w/8 
+                ('up_1', self.upsample),        # 128, h/4, w/4
+                ('c3_2', C3(channels[0], channels[1])),  # 64, h/4, w/4
+                ('up_2', self.upsample),        # 64, h/2, w/2
+                ('dwc', DWConv(channels[1], channels[-1])),  # 1, h/2, w/2
+                ('up_3', self.upsample),        # 1, h, w
+            ]))
 
     def forward(self, x):
-        # x = self.cv3(self.cv2(self.cv1(x)))
-        # return self.cv4(self.upsample(x))
-        return self.dwc(self.upsample(self.c3(x)))
+        return self.protonet(x)
 
 
 class C3TR(C3):
@@ -295,9 +300,10 @@ class AutoShape(nn.Module):
     multi_label = False  # NMS multiple labels per box
     max_det = 1000  # maximum number of detections per image
 
-    def __init__(self, model):
+    def __init__(self, model, enable_seg=False):
         super().__init__()
         self.model = model.eval()
+        self.enable_seg = enable_seg
 
     def autoshape(self):
         LOGGER.info('AutoShape already enabled, skipping... ')  # model already converted to model.autoshape()
@@ -306,7 +312,10 @@ class AutoShape(nn.Module):
     def _apply(self, fn):
         # Apply to(), cpu(), cuda(), half() to model tensors that are not parameters or registered buffers
         self = super()._apply(fn)
-        m = self.model.model[-1]  # Detect()
+        if self.enable_seg:
+            m = self.model.model[-2]  # Detect() is 2nd last in seg yaml
+        else:
+            m = self.model.model[-1]  # Detect()
         m.stride = fn(m.stride)
         m.grid = list(map(fn, m.grid))
         if isinstance(m.anchor_grid, list):
@@ -481,3 +490,11 @@ class Classify(nn.Module):
     def forward(self, x):
         z = torch.cat([self.aap(y) for y in (x if isinstance(x, list) else [x])], 1)  # cat if list
         return self.flat(self.conv(z))  # flatten to x(b,c2)
+
+
+if __name__ == "__main__":
+    x = torch.zeros((8, 256, 80, 80))
+    protonet = ProtoNet(c1=256)
+    print(protonet)
+    y = protonet(x)
+    print(y.size())  # (8, 1, 640, 640)

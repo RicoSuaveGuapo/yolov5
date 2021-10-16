@@ -1,3 +1,7 @@
+# Working spaces
+* jarvis: /usr/AI/Defect_segmentation
+* mcut: /nfs/Workspace/Defect_segmentation
+
 ## Action items
 1. Dataloader (V)
 2. Model
@@ -55,9 +59,22 @@ Let the mask data be read in the function in `dataset.py`
 ## 2. Model and Training
 
 ### 2.1 Model Construction
+* Done
 
-#### Process
-In `yolo.py` and `common.py`.
+#### Issue
+* We might need better refactor for the issue of changing index -1 to -2 for `Detect()` in original code.
+* Using better seg module structure?
+
+#### Note
+* I use `model/yolov5s_seg.yaml` to configure the seg model
+
+#### Target
+* Output seg prediction map
+
+#### Logic
+* Add the segmentation model
+
+### 2.2 Loss
 
 #### Issue
 
@@ -66,7 +83,6 @@ In `yolo.py` and `common.py`.
 #### Target
 
 #### Logic
-Add the segmentation model after the module index
 
 ### 2.1 Training Script
 
