@@ -75,10 +75,12 @@ Let the mask data be read in the function in `dataset.py`
 * Add the segmentation model
 
 ### 2.2 Loss
+* now at `val.py`
 
 #### Issue
 
 #### Note
+* the mask related hyperparameters are set in `yolov5/data/hyps/hyp.scratch.yaml`
 
 #### Target
 

@@ -564,7 +564,7 @@ class LoadImagesAndLabels(Dataset):
             if self.enable_seg:
                 ori_mask = self.mask_files[index]
                 mask = resize_mask(self, ori_mask, output_size=(h, w))
-                mask = torch.from_numpy(mask)
+                mask = torch.from_numpy(mask.astype(np.float))
             else:
                 mask = None
 
@@ -630,7 +630,7 @@ class LoadImagesAndLabels(Dataset):
         for i, l in enumerate(label):
             l[:, 0] = i  # add target image index for build_targets()
         if mask is not None:
-            return torch.stack(img, 0), torch.cat(label, 0), path, shapes, torch.stack(mask, 0)
+            return torch.stack(img, 0), torch.cat(label, 0), path, shapes, torch.stack(mask, 0).unsqueeze(1)
         else:
             return torch.stack(img, 0), torch.cat(label, 0), path, shapes, None
 
