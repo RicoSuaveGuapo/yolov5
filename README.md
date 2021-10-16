@@ -5,23 +5,28 @@
 4. Metric
 
 ### Code Snippet
-* for mcut: python train.py --enable_seg True --json_dir /root/Defect_detection/defect_data/green_crop/annotations/
-* for jarvis: python train.py --enable_seg True --json_dir /usr/AI/Defect_detection/defect_data/green_crop/annotations/
+* Preprocess data: example
+```python gt_preprocess.py --ori_dir /usr/AI/defect_data/green_crop --output_dir /usr/AI/defect_data/defect_seg_dataset --check_dir /usr/AI/defect_data/checker```
+
+* Training
+    * for mcut:
+    ```python train.py --enable_seg True --json_dir ```
+    * for jarvis:
+    ```python train.py --enable_seg True --json_dir /usr/AI/Defect_detection/defect_data/green_crop/annotations/```
 
 ## 1. Dataloader
 ### Process
 * Done
 ### Issue
-* Need to check the bbox size (increase or not) and mask
-* In Jarvis, the dataset yaml is wrong for now. Waiting for connection to MCUT
-(I wrote some code are not in the repo... bad habit...)
 
 ### Note
-* The data is from `/root/Defect_detection/defect_data/green_crop`.
+* The data
+    * jarvis: `/usr/AI/defect_data/defect_seg_dataset`.
+    * mcut: ``.
 * I will turn off mosaic augmentation in dataloader save the effort
 * One image with one mask, does not matter the instance counts.
 * Remeber to use the same json files and data.yaml, they are decouple!
-* In `/root/Defect_detection/defect_data/toyolov5_format.py`, there is function for splitting dataset
+* In `yolov5/utils/gt_preprocess.py`, there is function for splitting dataset
 * I have turned off all the data argumentation
 * letterbox will not change mask, if img size is 640x640
 
