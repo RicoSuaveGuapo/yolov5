@@ -38,7 +38,7 @@ def xyxy2nxywh(bbox, size):
 
 
 def json2yolo(json_paths: list, opt, task: str):
-    json_names = [os.path.basename(json_path).replace('json', '.txt') for json_path in json_paths]
+    json_names = [os.path.basename(json_path).replace('json', 'txt') for json_path in json_paths]
     json_output_paths = [os.path.join(opt.lab_output_dir, task, json_name) for json_name in json_names]
     for i, json_path in enumerate(json_paths):
         with open(json_path) as f:
@@ -85,7 +85,7 @@ def split_tasks(paths: list, opt):
     random.seed(opt.seed)
     random.shuffle(paths)
     train_end_index = int(len(paths) * (1 - opt.val_ratio - opt.test_ratio))
-    val_end_index = int(len(paths) * (1 - opt.val_ratio))
+    val_end_index = int(len(paths) * (1 - opt.test_ratio))
 
     train_paths = paths[:train_end_index]
     val_paths = paths[train_end_index:val_end_index]

@@ -12,7 +12,7 @@
     * for mcut:
     ```python train.py --enable_seg True --json_dir ```
     * for jarvis:
-    ```python train.py --enable_seg True --json_dir /usr/AI/Defect_detection/defect_data/green_crop/annotations/```
+    ```python train.py --enable_seg True --json_dir /usr/AI/defect_data/green_crop/annotations/```
 
 ## 1. Dataloader
 ### Process
