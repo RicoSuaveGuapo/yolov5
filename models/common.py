@@ -137,6 +137,20 @@ class C3(nn.Module):
         return self.cv3(torch.cat((self.m(self.cv1(x)), self.cv2(x)), dim=1))
 
 
+class ProtoNet(nn.Module):
+    def __init__(self, c1, channels=[128, 64, 1], scale_factor=2):
+        super().__init__()
+        _c = int(256 * e)
+        self.c3 = C3(c1, _c)
+        self.upsample = nn.Upsample(scale_factor=scale_factor, mode='bilinear', align_corners=False)
+        self.dwc = DWConv(_c, output_dim)
+
+    def forward(self, x):
+        # x = self.cv3(self.cv2(self.cv1(x)))
+        # return self.cv4(self.upsample(x))
+        return self.dwc(self.upsample(self.c3(x)))
+
+
 class C3TR(C3):
     # C3 module with TransformerBlock()
     def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5):

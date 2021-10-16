@@ -565,6 +565,8 @@ class LoadImagesAndLabels(Dataset):
                 ori_mask = self.mask_files[index]
                 mask = resize_mask(self, ori_mask, output_size=(h, w))
                 mask = torch.from_numpy(mask)
+            else:
+                mask = None
 
             # Letterbox
             shape = self.batch_shapes[self.batch[index]] if self.rect else self.img_size  # final letterboxed shape
@@ -618,6 +620,8 @@ class LoadImagesAndLabels(Dataset):
         img = img.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
         img = np.ascontiguousarray(img)
 
+        # assert img.shape == mask, 'image shape is different from mask, check whether you image size is 608x608'
+
         return torch.from_numpy(img), labels_out, self.img_files[index], shapes, mask
 
     @staticmethod
@@ -625,7 +629,10 @@ class LoadImagesAndLabels(Dataset):
         img, label, path, shapes, mask = zip(*batch)  # transposed
         for i, l in enumerate(label):
             l[:, 0] = i  # add target image index for build_targets()
-        return torch.stack(img, 0), torch.cat(label, 0), path, shapes, torch.stack(mask, 0)
+        if mask is not None:
+            return torch.stack(img, 0), torch.cat(label, 0), path, shapes, torch.stack(mask, 0)
+        else:
+            return torch.stack(img, 0), torch.cat(label, 0), path, shapes, None
 
     @staticmethod
     def collate_fn4(batch):
