@@ -114,7 +114,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         with torch_distributed_zero_first(LOCAL_RANK):
             weights = attempt_download(weights)  # download if not found locally
         ckpt = torch.load(weights, map_location=device)  # load checkpoint
-        model = Model(cfg or ckpt['model'].yaml, ch=3, nc=nc, anchors=hyp.get('anchors')).to(device)  # create
+        model = Model(cfg or ckpt['model'].yaml, ch=3, nc=nc, anchors=hyp.get('anchors'), enable_seg=opt.enable_seg).to(device)  # create
         exclude = ['anchor'] if (cfg or hyp.get('anchors')) and not resume else []  # exclude keys
         csd = ckpt['model'].float().state_dict()  # checkpoint state_dict as FP32
         csd = intersect_dicts(csd, model.state_dict(), exclude=exclude)  # intersect
@@ -192,7 +192,10 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
     # Image sizes
     gs = max(int(model.stride.max()), 32)  # grid size (max stride)
-    nl = model.model[-1].nl  # number of detection layers (used for scaling hyp['obj'])
+    if opt.enable_seg:
+        nl = model.model[-2].nl  # Detect is 2nd last in seg yaml
+    else:
+        nl = model.model[-1].nl  # number of detection layers (used for scaling hyp['obj'])
     imgsz = check_img_size(opt.imgsz, gs, floor=gs * 2)  # verify imgsz is gs-multiple
 
     # DP mode
@@ -236,7 +239,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
             # Anchors
             if not opt.noautoanchor:
-                check_anchors(dataset, model=model, thr=hyp['anchor_t'], imgsz=imgsz)
+                check_anchors(dataset, model=model, thr=hyp['anchor_t'], imgsz=imgsz, enable_seg=opt.enable_seg)
             model.half().float()  # pre-reduce anchor precision
 
         callbacks.run('on_pretrain_routine_end')
@@ -265,7 +268,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     scheduler.last_epoch = start_epoch - 1  # do not move
     scaler = amp.GradScaler(enabled=cuda)
     stopper = EarlyStopping(patience=opt.patience)
-    compute_loss = ComputeLoss(model)  # init loss class
+    compute_loss = ComputeLoss(model, enable_seg=opt.enable_seg)  # init loss class
     LOGGER.info(f'Image sizes {imgsz} train, {imgsz} val\n'
                 f'Using {train_loader.num_workers} dataloader workers\n'
                 f"Logging results to {colorstr('bold', save_dir)}\n"
@@ -282,19 +285,25 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         # Update mosaic border (optional)
         # b = int(random.uniform(0.25 * imgsz, 0.75 * imgsz + gs) // gs * gs)
         # dataset.mosaic_border = [b - imgsz, -b]  # height, width borders
-
-        mloss = torch.zeros(3, device=device)  # mean losses
+        if opt.enable_seg:
+            mloss = torch.zeros(4, device=device)  # lbox, lobj, lcls, lmask
+        else:
+            mloss = torch.zeros(3, device=device)  # mean losses
         if RANK != -1:
             train_loader.sampler.set_epoch(epoch)
         pbar = enumerate(train_loader)
-        LOGGER.info(('\n' + '%10s' * 7) % ('Epoch', 'gpu_mem', 'box', 'obj', 'cls', 'labels', 'img_size'))
+        if opt.enable_seg:
+            LOGGER.info(('\n' + '%10s' * 8) % ('Epoch', 'gpu_mem', 'box', 'obj', 'cls',  'mask', 'labels', 'img_size'))
+        else:
+            LOGGER.info(('\n' + '%10s' * 7) % ('Epoch', 'gpu_mem', 'box', 'obj', 'cls', 'labels', 'img_size'))
         if RANK in [-1, 0]:
             pbar = tqdm(pbar, total=nb)  # progress bar
         optimizer.zero_grad()
         for i, (imgs, targets, paths, _, masks) in pbar:  # batch -------------------------------------------------------------
-            breakpoint()
             ni = i + nb * epoch  # number integrated batches (since train start)
             imgs = imgs.to(device, non_blocking=True).float() / 255.0  # uint8 to float32, 0-255 to 0.0-1.0
+            if opt.enable_seg:
+                masks = masks.to(device, non_blocking=True)
 
             # Warmup
             if ni <= nw:
@@ -317,8 +326,12 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
             # Forward
             with amp.autocast(enabled=cuda):
-                pred = model(imgs)  # forward
-                loss, loss_items = compute_loss(pred, targets.to(device))  # loss scaled by batch_size
+                if opt.enable_seg:
+                    pred, proto_out = model(imgs)  # forward
+                    loss, loss_items = compute_loss(pred, targets.to(device), proto_out, masks)
+                else:
+                    pred = model(imgs)
+                    loss, loss_items = compute_loss(pred, targets.to(device))  # loss scaled by batch_size
                 if RANK != -1:
                     loss *= WORLD_SIZE  # gradient averaged between devices in DDP mode
                 if opt.quad:
@@ -340,8 +353,12 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             if RANK in [-1, 0]:
                 mloss = (mloss * i + loss_items) / (i + 1)  # update mean losses
                 mem = f'{torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0:.3g}G'  # (GB)
-                pbar.set_description(('%10s' * 2 + '%10.4g' * 5) % (
-                    f'{epoch}/{epochs - 1}', mem, *mloss, targets.shape[0], imgs.shape[-1]))
+                if opt.enable_seg:
+                    pbar.set_description(('%10s' * 2 + '%10.4g' * 6) % (
+                        f'{epoch}/{epochs - 1}', mem, *mloss, targets.shape[0], imgs.shape[-1]))
+                else:
+                    pbar.set_description(('%10s' * 2 + '%10.4g' * 5) % (
+                        f'{epoch}/{epochs - 1}', mem, *mloss, targets.shape[0], imgs.shape[-1]))
                 callbacks.run('on_train_batch_end', ni, model, imgs, targets, paths, plots, opt.sync_bn)
             # end batch ------------------------------------------------------------------------------------------------
 
@@ -439,7 +456,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 def parse_opt(known=False):
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', type=str, default=ROOT / 'yolov5s.pt', help='initial weights path')
-    parser.add_argument('--cfg', type=str, default='', help='model.yaml path')
+    parser.add_argument('--cfg', type=str, default='yolov5s_seg.yaml', help='model.yaml path')
     parser.add_argument('--data', type=str, default=ROOT / 'data/green_data.yaml', help='dataset.yaml path')
     parser.add_argument('--hyp', type=str, default=ROOT / 'data/hyps/hyp.scratch.yaml', help='hyperparameters path')
     parser.add_argument('--epochs', type=int, default=300)
