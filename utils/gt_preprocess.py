@@ -15,11 +15,15 @@ def check_parser(opt):
     assert os.path.exists(opt.output_dir), 'Not existing output directory'
 
 
-def copy_image(img_paths: list, opt, task):
-    img_names = [os.path.basename(img_path) for img_path in img_paths]
-    img_output_paths = [os.path.join(opt.img_output_dir, task, img_name) for img_name in img_names]
-    [shutil.copyfile(img_path, img_output_paths[i]) for i, img_path in enumerate(img_paths)]
-    return img_output_paths[0]
+def copy_file(file_paths: list, opt, task, target_type):
+    assert target_type in ['image', 'json']
+    file_names = [os.path.basename(file_path) for file_path in file_paths]
+    if target_type == 'image':
+        file_output_paths = [os.path.join(opt.img_output_dir, task, img_name) for img_name in file_names]
+    elif target_type == 'json':
+        file_output_paths = [os.path.join(opt.json_output_dir, task, json_name) for json_name in file_names]
+    [shutil.copyfile(file_path, file_output_paths[i]) for i, file_path in enumerate(file_paths)]
+    return file_output_paths[0]
 
 
 def xyxy2nxywh(bbox, size):
@@ -59,19 +63,25 @@ def json2yolo(json_paths: list, opt, task: str):
 def create_dir(opt):
     img_output_dir = os.path.join(opt.output_dir, 'images')
     lab_output_dir = os.path.join(opt.output_dir, 'labels')
+    json_output_dir = os.path.join(opt.output_dir, 'jsons')
     if not os.path.exists(img_output_dir):
         os.mkdir(img_output_dir)
         os.mkdir(lab_output_dir)
+        os.mkdir(json_output_dir)
     else:
         shutil.rmtree(img_output_dir)
         shutil.rmtree(lab_output_dir)
+        shutil.rmtree(json_output_dir)
         os.mkdir(img_output_dir)
         os.mkdir(lab_output_dir)
+        os.mkdir(json_output_dir)
         [os.mkdir(os.path.join(img_output_dir, task)) for task in opt.tasks]
         [os.mkdir(os.path.join(lab_output_dir, task)) for task in opt.tasks]
+        [os.mkdir(os.path.join(json_output_dir, task)) for task in opt.tasks]
 
     opt.img_output_dir = img_output_dir
     opt.lab_output_dir = lab_output_dir
+    opt.json_output_dir = json_output_dir
 
     # for visualization
     if not os.path.exists(opt.check_dir):
@@ -90,6 +100,7 @@ def split_tasks(paths: list, opt):
     train_paths = paths[:train_end_index]
     val_paths = paths[train_end_index:val_end_index]
     test_paths = paths[val_end_index:]
+    paths.sort()  # keep the orginal order
 
     return train_paths, val_paths, test_paths
 
@@ -109,10 +120,12 @@ def preprocess_dataset(opt):
         'The name of image order is different from annotations'
     img_paths = split_tasks(image_paths, opt)
     lab_paths = split_tasks(json_paths, opt)
+    json_paths = split_tasks(json_paths, opt)
 
     for i, task in enumerate(opt.tasks):
         output_lab_path = json2yolo(lab_paths[i], opt, task)
-        output_img_path = copy_image(img_paths[i], opt, task)
+        output_img_path = copy_file(img_paths[i], opt, task, target_type='image')
+        output_json_path = copy_file(json_paths[i], opt, task, target_type='json')
 
     return output_img_path, output_lab_path  # for visualization check
 
