@@ -106,6 +106,7 @@ def run(data,
         plots=True,
         callbacks=Callbacks(),
         compute_loss=None,
+        enable_seg=False
         ):
     # Initialize/load model and set device
     training = model is not None
@@ -158,7 +159,10 @@ def run(data,
     class_map = coco80_to_coco91_class() if is_coco else list(range(1000))
     s = ('%20s' + '%11s' * 6) % ('Class', 'Images', 'Labels', 'P', 'R', 'mAP@.5', 'mAP@.5:.95')
     dt, p, r, f1, mp, mr, map50, map = [0.0, 0.0, 0.0], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
-    loss = torch.zeros(3, device=device)
+    if enable_seg:
+        loss = torch.zeros(4, device=device)
+    else:
+        loss = torch.zeros(3, device=device)
     jdict, stats, ap, ap_class = [], [], [], []
     for batch_i, (img, targets, paths, shapes, masks) in enumerate(tqdm(dataloader, desc=s)):
         t1 = time_sync()
@@ -166,17 +170,25 @@ def run(data,
         img = img.half() if half else img.float()  # uint8 to fp16/32
         img /= 255.0  # 0 - 255 to 0.0 - 1.0
         targets = targets.to(device)
+        if enable_seg:
+            masks = masks.to(device, non_blocking=True)
         nb, _, height, width = img.shape  # batch size, channels, height, width
         t2 = time_sync()
         dt[0] += t2 - t1
 
         # Run model
-        out, train_out = model(img, augment=augment)  # inference and training outputs
+        if enable_seg:
+            (out, train_out), proto_out = model(img, augment=augment)  # ((inference and training outputs), seg output)
+        else:
+            out, train_out = model(img, augment=augment)  # inference and training outputs
         dt[1] += time_sync() - t2
 
         # Compute loss
         if compute_loss:
-            loss += compute_loss([x.float() for x in train_out], targets)[1]  # box, obj, cls
+            if enable_seg:
+                loss += compute_loss([x.float() for x in train_out], targets, proto_out, masks)[1]  # box, obj, cls, mask
+            else:
+                loss += compute_loss([x.float() for x in train_out], targets)[1]  # box, obj, cls
 
         # Run NMS
         targets[:, 2:] *= torch.Tensor([width, height, width, height]).to(device)  # to pixels
@@ -225,10 +237,14 @@ def run(data,
 
         # Plot images
         if plots and batch_i < 3:
+            if not enable_seg:
+                masks = None
+                proto_out = None
             f = save_dir / f'val_batch{batch_i}_labels.jpg'  # labels
-            Thread(target=plot_images, args=(img, targets, paths, f, names), daemon=True).start()
+            Thread(target=plot_images, args=(img, targets, paths, f, names, masks), daemon=True).start()
             f = save_dir / f'val_batch{batch_i}_pred.jpg'  # predictions
-            Thread(target=plot_images, args=(img, output_to_target(out), paths, f, names), daemon=True).start()
+            Thread(target=plot_images, args=(img, output_to_target(out), paths, f, names, proto_out, 1920, 16, True), daemon=True).start()
+        break
 
     # Compute statistics
     stats = [np.concatenate(x, 0) for x in zip(*stats)]  # to numpy

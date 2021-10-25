@@ -2,10 +2,16 @@
 * jarvis: /usr/AI/Defect_segmentation
 * mcut: /nfs/Workspace/Defect_segmentation
 
+## TODO List
+* Change to DenseConnect Module for segmentation
+* Add segmentation augmentation in dataloader
+* Try Dice loss, or tuning mask loss gain
+* Support rect training or validation (masks and proto_out size should cautious)
+
 ## Action items
 1. Dataloader (V)
-2. Model
-3. Inference
+2. Model (V)
+3. Inference (V)
 4. Metric
 
 ### Code Snippet
@@ -22,13 +28,14 @@ python gt_preprocess.py --ori_dir /nfs/Workspace/defect_data/green_crop --output
 
 
 * Training
+    For ignoring autoanchor, add `--noautoanchor`.
     * for mcut:
     ```
-    python train.py --enable_seg True --json_dir /nfs/Workspace/defect_data/green_crop/annotations
+    python train.py --enable_seg True
     ```
     * for jarvis:
     ```
-    python train.py --enable_seg True --json_dir /usr/AI/defect_data/green_crop/annotations/
+    python train.py --enable_seg True
     ```
 
 ## 1. Dataloader
@@ -37,6 +44,7 @@ python gt_preprocess.py --ori_dir /nfs/Workspace/defect_data/green_crop --output
 ### Issue
 
 ### Note
+* json files are also splitted, and json paths are registered in `.yaml` also.
 * The data
     * jarvis: `/usr/AI/defect_data/defect_seg_dataset`.
     * mcut: ``.
@@ -75,20 +83,24 @@ Let the mask data be read in the function in `dataset.py`
 * Add the segmentation model
 
 ### 2.2 Loss
-* now at `val.py`
-
-#### Issue
+DONE
 
 #### Note
 * the mask related hyperparameters are set in `yolov5/data/hyps/hyp.scratch.yaml`
 
-#### Target
-
-#### Logic
-
-### 2.1 Training Script
 
 ## 3. Inference
+
+### Issue
+* Since our defects are plenty small, for visulization only, I draw the bbox slightly bigger then ground truth
+* Originally, `rect` is opened in val dataset, which causes `masks` size is different from `proto_out`.
+  therefore, I turn off `rect` in val dataset.
+* The number of subplots is controled by batch_size, I change the batch-size to 1 for visualization both val and train
+* train image visualization code is in `utils/loggers/__init__.py`
+
+### Progress
+At `train.py` line 398
+    
 
 ## 4. Metric
 1. FPS

@@ -66,7 +66,8 @@ class Annotator:
         check_font()  # download TTF if necessary
 
     # YOLOv5 Annotator for train/val mosaics and jpgs and detect/hub inference annotations
-    def __init__(self, im, line_width=None, font_size=None, font='Arial.ttf', pil=False, example='abc'):
+    def __init__(self, im, line_width=None, font_size=None, font='Arial.ttf', pil=False, example='abc',
+                 mosaic_mask=None):
         assert im.data.contiguous, 'Image not contiguous. Apply np.ascontiguousarray(im) to Annotator() input images.'
         self.pil = pil or not is_ascii(example) or is_chinese(example)
         if self.pil:  # use PIL
@@ -77,6 +78,7 @@ class Annotator:
         else:  # use cv2
             self.im = im
         self.lw = line_width or max(round(sum(im.shape) / 2 * 0.003), 2)  # line width
+        self.mosaic_mask = mosaic_mask
 
     def box_label(self, box, label='', color=(128, 128, 128), txt_color=(255, 255, 255)):
         # Add one xyxy box to image with label
@@ -102,6 +104,14 @@ class Annotator:
                 cv2.rectangle(self.im, p1, p2, color, -1, cv2.LINE_AA)  # filled
                 cv2.putText(self.im, label, (p1[0], p1[1] - 2 if outside else p1[1] + h + 2), 0, self.lw / 3, txt_color,
                             thickness=tf, lineType=cv2.LINE_AA)
+
+    def crop_mask(self, mask, box):
+        # crop the mask by bbox
+        x1, y1, x2, y2 = map(int, box)
+        output_mask = np.zeros_like(mask)
+        output_mask[y1:y2, x1:x2] = mask[y1:y2, x1:x2] * 255
+        output_mask = Image.fromarray(output_mask, mode='L')
+        self.draw.bitmap((0, 0), output_mask, fill=(255, 0, 0, 128))
 
     def rectangle(self, xy, fill=None, outline=None, width=1):
         # Add rectangle to image (PIL-only)
@@ -148,26 +158,47 @@ def output_to_target(output):
     return np.array(targets)
 
 
-def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max_size=1920, max_subplots=16):
-    # Plot image grid with labels
+def thresholding_mask(masks, threshold=0.25):
+    return np.where(masks > threshold, 1, 0)
+
+
+def plot_images(images, targets, paths=None, fname='images.jpg', names=None, masks=None, max_size=1920, max_subplots=16,
+                is_pred=False, mask_threshold=0.25):
+    '''Plot image grid with labels
+    if plotting ground truth:
+        - targets: (bz, [batch_id, class_id, x, y, w, h])
+    if plotting model predcition:
+        - targets: (bz, [batch_id, class_id, x, y, w, h, conf])
+    masks: (bz, 1, h, w)
+    '''
     if isinstance(images, torch.Tensor):
         images = images.cpu().float().numpy()
     if isinstance(targets, torch.Tensor):
         targets = targets.cpu().numpy()
     if np.max(images[0]) <= 1:
         images *= 255.0  # de-normalise (optional)
+    if masks is not None:
+        masks4plot = masks.cpu().numpy()
+        if is_pred:
+            masks4plot = thresholding_mask(masks.cpu().numpy(), mask_threshold)
+
+
     bs, _, h, w = images.shape  # batch size, _, height, width
     bs = min(bs, max_subplots)  # limit plot images
     ns = np.ceil(bs ** 0.5)  # number of subplots (square)
 
     # Build Image
     mosaic = np.full((int(ns * h), int(ns * w), 3), 255, dtype=np.uint8)  # init
+    if masks is not None:
+        mosaic_mask = np.full((int(ns * h), int(ns * w)), 0, dtype=np.uint8)  # init
     for i, im in enumerate(images):
         if i == max_subplots:  # if last batch has fewer images than we expect
             break
         x, y = int(w * (i // ns)), int(h * (i % ns))  # block origin
         im = im.transpose(1, 2, 0)
         mosaic[y:y + h, x:x + w, :] = im
+        if masks is not None:
+            mosaic_mask[y:y + h, x:x + w] = masks4plot[i]
 
     # Resize (optional)
     scale = max_size / ns / max(h, w)
@@ -175,10 +206,15 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
         h = math.ceil(scale * h)
         w = math.ceil(scale * w)
         mosaic = cv2.resize(mosaic, tuple(int(x * ns) for x in (w, h)))
+        if masks is not None:
+            mosaic_mask = cv2.resize(mosaic_mask, tuple(int(x * ns) for x in (w, h)))
 
     # Annotate
     fs = int((h + w) * ns * 0.01)  # font size
-    annotator = Annotator(mosaic, line_width=round(fs / 10), font_size=fs, pil=True)
+    if masks is not None:
+        annotator = Annotator(mosaic, line_width=round(fs / 10), font_size=fs, pil=True, mosaic_mask=mosaic_mask)
+    else:
+        annotator = Annotator(mosaic, line_width=round(fs / 10), font_size=fs, pil=True)
     for i in range(i + 1):
         x, y = int(w * (i // ns)), int(h * (i % ns))  # block origin
         annotator.rectangle([x, y, x + w, y + h], None, (255, 255, 255), width=2)  # borders
@@ -205,7 +241,12 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
                 cls = names[cls] if names else cls
                 if labels or conf[j] > 0.25:  # 0.25 conf thresh
                     label = f'{cls}' if labels else f'{cls} {conf[j]:.1f}'
+                    # Increase a bit the bbox for visualization only
+                    artifact_enlarge_space = 5
+                    box = [b - artifact_enlarge_space if i <= 1 else b + artifact_enlarge_space for i, b in enumerate(box)]
                     annotator.box_label(box, label, color=color)
+                    if masks is not None:
+                        annotator.crop_mask(mosaic_mask, box)
     annotator.im.save(fname)  # save
 
 

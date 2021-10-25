@@ -102,6 +102,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     with torch_distributed_zero_first(LOCAL_RANK):
         data_dict = data_dict or check_dataset(data)  # check if None
     train_path, val_path = data_dict['train'], data_dict['val']
+    json_train_path, json_val_path = data_dict['json_train'], data_dict['json_val']
     nc = 1 if single_cls else int(data_dict['nc'])  # number of classes
     names = ['item'] if single_cls and len(data_dict['names']) != 1 else data_dict['names']  # class names
     assert len(names) == nc, f'{len(names)} names found for nc={nc} dataset in {data}'  # check
@@ -216,7 +217,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                                               workers=workers, image_weights=opt.image_weights, quad=opt.quad,
                                               prefix=colorstr('train: '),
                                               enable_seg=opt.enable_seg,
-                                              json_dir=opt.json_dir)
+                                              json_dir=json_train_path)
     mlc = int(np.concatenate(dataset.labels, 0)[:, 0].max())  # max label class
     nb = len(train_loader)  # number of batches
     assert mlc < nc, f'Label class {mlc} exceeds nc={nc} in {data}. Possible class labels are 0-{nc - 1}'
@@ -224,10 +225,10 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     # Process 0
     if RANK in [-1, 0]:
         val_loader = create_dataloader(val_path, imgsz, batch_size // WORLD_SIZE * 2, gs, single_cls,
-                                       hyp=hyp, cache=None if noval else opt.cache, rect=True, rank=-1,
+                                       hyp=hyp, cache=None if noval else opt.cache, rect=False, rank=-1,
                                        workers=workers, pad=0.5,
                                        enable_seg=opt.enable_seg,
-                                       prefix=colorstr('val: '), json_dir=opt.json_dir)[0]
+                                       prefix=colorstr('val: '), json_dir=json_val_path)[0]
 
         if not resume:
             labels = np.concatenate(dataset.labels, 0)
@@ -359,7 +360,11 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                 else:
                     pbar.set_description(('%10s' * 2 + '%10.4g' * 5) % (
                         f'{epoch}/{epochs - 1}', mem, *mloss, targets.shape[0], imgs.shape[-1]))
-                callbacks.run('on_train_batch_end', ni, model, imgs, targets, paths, plots, opt.sync_bn)
+                if opt.enable_seg:
+                    callbacks.run('on_train_batch_end', ni, model, imgs, targets, paths, plots, opt.sync_bn, masks)
+                else:
+                    callbacks.run('on_train_batch_end', ni, model, imgs, targets, paths, plots, opt.sync_bn)
+            break
             # end batch ------------------------------------------------------------------------------------------------
 
         # Scheduler
@@ -379,15 +384,17 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                                            single_cls=single_cls,
                                            dataloader=val_loader,
                                            save_dir=save_dir,
-                                           plots=False,
+                                           plots=True,
                                            callbacks=callbacks,
-                                           compute_loss=compute_loss)
+                                           compute_loss=compute_loss,
+                                           enable_seg=opt.enable_seg)
 
             # Update best mAP
             fi = fitness(np.array(results).reshape(1, -1))  # weighted combination of [P, R, mAP@.5, mAP@.5-.95]
             if fi > best_fitness:
                 best_fitness = fi
             log_vals = list(mloss) + list(results) + lr
+            breakpoint()
             callbacks.run('on_fit_epoch_end', log_vals, epoch, best_fitness, fi)
 
             # Save model
@@ -488,7 +495,6 @@ def parse_opt(known=False):
     parser.add_argument('--save-period', type=int, default=-1, help='Save checkpoint every x epochs (disabled if < 1)')
     parser.add_argument('--local_rank', type=int, default=-1, help='DDP parameter, do not modify')
     parser.add_argument('--enable_seg', type=str, help='open mask data output')
-    parser.add_argument('--json_dir', type=str, help='annotation direcoty for mask')
 
     # Weights & Biases arguments
     parser.add_argument('--entity', default=None, help='W&B: Entity')
