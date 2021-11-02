@@ -500,6 +500,18 @@ def coco80_to_coco91_class():  # converts 80-index (val2014) to 91-index (paper)
     return x
 
 
+def create_insts_mask(bboxes, mask, mask_conf_threshold):
+    mask = mask.squeeze().cpu().numpy()
+    bboxes = bboxes.astype(np.int)
+    insts_mask = []
+    for i, bbox in enumerate(bboxes):
+        inst_mask = np.zeros_like(mask)
+        inst_mask[bbox[1]:bbox[3], bbox[0]:bbox[2]] = mask[bbox[1]:bbox[3], bbox[0]:bbox[2]]
+        inst_mask = np.where(inst_mask > mask_conf_threshold, 1, 0)
+        insts_mask.append(inst_mask)
+    return insts_mask
+
+
 def xyxy2xywh(x):
     # Convert nx4 boxes from [x1, y1, x2, y2] to [x, y, w, h] where xy1=top-left, xy2=bottom-right
     y = x.clone() if isinstance(x, torch.Tensor) else np.copy(x)

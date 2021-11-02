@@ -27,7 +27,7 @@ from models.experimental import attempt_load
 from utils.datasets import create_dataloader
 from utils.general import coco80_to_coco91_class, check_dataset, check_img_size, check_requirements, \
     check_suffix, check_yaml, box_iou, non_max_suppression, scale_coords, xyxy2xywh, xywh2xyxy, set_logging, \
-    increment_path, colorstr, print_args
+    increment_path, colorstr, print_args, create_insts_mask
 from utils.metrics import ap_per_class, ConfusionMatrix
 from utils.plots import output_to_target, plot_images, plot_val_study
 from utils.torch_utils import select_device, time_sync
@@ -106,7 +106,8 @@ def run(data,
         plots=True,
         callbacks=Callbacks(),
         compute_loss=None,
-        enable_seg=False
+        enable_seg=False,
+        mask_conf_threshold=0.5
         ):
     # Initialize/load model and set device
     training = model is not None
@@ -166,6 +167,7 @@ def run(data,
     
     total_paths, total_masks = [], []  # for coco api
     jdict, stats, ap, ap_class = [], [], [], []
+    totoal_paths, total_bimasks, total_scores = [], [], []  # for coco api
     for batch_i, (img, targets, paths, shapes, masks) in enumerate(tqdm(dataloader, desc=s)):
         total_paths += paths  # paths: list  # for coco api
         total_masks.append(masks.detach().cpu().numpy())  # masks: torch.Tensor  # for coco api
@@ -203,6 +205,8 @@ def run(data,
         dt[2] += time_sync() - t3
 
         # Statistics per image
+        # coco_bboxes_conf_list = []
+        # coco_insts_masks_list = []
         for si, pred in enumerate(out):
             labels = targets[targets[:, 0] == si, 1:]
             nl = len(labels)
@@ -233,6 +237,13 @@ def run(data,
                 correct = torch.zeros(pred.shape[0], niou, dtype=torch.bool)
             stats.append((correct.cpu(), pred[:, 4].cpu(), pred[:, 5].cpu(), tcls))  # (correct, conf, pcls, tcls)
 
+            # Creating
+            # 1. prediction of instance-mask: [[inst_mask_1, inst_mask_2, ...], ... ] length bz
+            # 2. corresponding bbox scores: [[det_conf_1, det_conf_2, ...], ... ] length bz
+            # for coco api
+            # coco_insts_masks_list.append(create_insts_mask(pred[:, :4].cpu().numpy(), masks[si], mask_conf_threshold))
+            # coco_bboxes_conf_list.append(pred[:, 4].cpu().numpy())
+
             # Save/log
             if save_txt:
                 save_one_txt(predn, save_conf, shape, file=save_dir / 'labels' / (path.stem + '.txt'))
@@ -249,7 +260,6 @@ def run(data,
             Thread(target=plot_images, args=(img, targets, paths, f, names, masks), daemon=True).start()
             f = save_dir / f'val_batch{batch_i}_pred.jpg'  # predictions
             Thread(target=plot_images, args=(img, output_to_target(out), paths, f, names, proto_out, 1920, 16, True), daemon=True).start()
-        break
 
     # Compute statistics
     stats = [np.concatenate(x, 0) for x in zip(*stats)]  # to numpy
@@ -291,6 +301,15 @@ def run(data,
     if plots:
         confusion_matrix.plot(save_dir=save_dir, names=list(names.values()))
         callbacks.run('on_val_end')
+
+    if enable_seg:
+        pass
+        # from utils.coco import pred2json, coco_eval
+        # Comment out for now
+        # coco_gt = COCO(opt.gt_coco_file)  # TODO: check opt.gt_coco_file exists
+        # pred2json(coco_gt, paths, coco_insts_masks_list, coco_bboxes_conf_list, opt.pred_coco_file)  # TODO: image-wise, rather than instance-wise
+        # coco_dt = coco_gt.loadRes(opt.pred_coco_file)
+        # coco_eval(coco_gt, coco_dt)
 
     # Save JSON
     if save_json and len(jdict):
