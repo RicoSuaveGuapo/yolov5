@@ -1,5 +1,4 @@
 import json
-from numpy.core.fromnumeric import shape
 import torch
 import argparse
 import numpy as np
@@ -154,7 +153,6 @@ def get_img_id(coco, file_name):
     raise ValueError(f'Can not find the img ID of the img file {file_name}')
 
 
-
 def bimask2rle(bimask):
     assert isinstance(bimask, np.ndarray)
     assert bimask.ndim == 2, f'expected 2-dim (h, w), but got {bimask.ndim}'
@@ -164,7 +162,7 @@ def bimask2rle(bimask):
     return rle
 
 
-def pred2json(coco_gt, paths, bimasks, scores, result_file_path):
+def pred2coco(coco_gt, paths, bimasks, scores, result_file_path):
     # paths: [img_file_0, img_file_1, ...]
     # bimasks: [mask_0, mask_1, ...]
     # scores: [score_0, score_1, ...]
@@ -191,6 +189,10 @@ def pred2json(coco_gt, paths, bimasks, scores, result_file_path):
         f.write(json_results)
 
     print(f'saved prediction to {result_file_path}')
+
+    coco_dt = coco_gt.loadRes(result_file_path)
+
+    return coco_dt
 
 
 def coco_eval(coco_gt, coco_dt):
@@ -251,5 +253,5 @@ if __name__ == '__main__':
 
 #     coco_gt = COCO(coco_path)
 #     paths, bimasks, scores = generate_fake_predictions(coco_gt)
-#     pred2json(coco_gt, paths, bimasks, scores, result_file_path)
-#     coco_eval(coco_gt, result_file_path)
+#     coco_dt = pred2coco(coco_gt, paths, bimasks, scores, result_file_path)
+#     coco_eval(coco_gt, coco_dt)
