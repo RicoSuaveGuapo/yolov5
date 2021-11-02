@@ -3,9 +3,17 @@
 * mcut: /nfs/Workspace/Defect_segmentation
 
 ## TODO List
-* Change to DenseConnect Module for segmentation
+
+### Model
+1. Try Unet structure
+
+### Dataloader
 * Add segmentation augmentation in dataloader
+
+### Loss
 * Try Dice loss, or tuning mask loss gain
+
+### Training
 * Support rect training or validation (masks and proto_out size should cautious)
 
 ## Action items
@@ -28,14 +36,13 @@ python gt_preprocess.py --ori_dir /nfs/Workspace/defect_data/green_crop --output
 
 
 * Training
-    For ignoring autoanchor, add `--noautoanchor`.
     * for mcut:
     ```
-    python train.py --enable_seg True
+    python train.py --enable_seg True --noautoanchor --mask_loss_type dice
     ```
     * for jarvis:
     ```
-    python train.py --enable_seg True
+    python train.py --enable_seg True --noautoanchor
     ```
 
 ## 1. Dataloader
@@ -99,7 +106,7 @@ DONE
 * train image visualization code is in `utils/loggers/__init__.py`
 
 ### Progress
-At `train.py` line 398
+DONE
     
 
 ## 4. Metric
