@@ -12,7 +12,7 @@
 1. Dataloader (V)
 2. Model (V)
 3. Inference (V)
-4. Metric
+4. Metric (V)
 
 ### Code Snippet
 * Preprocess data:
@@ -26,8 +26,8 @@ mcut
 python gt_preprocess.py --ori_dir /nfs/Workspace/defect_data/green_crop --output_dir /nfs/Workspace/defect_data/defect_seg_dataset --check_dir /nfs/Workspace/defect_data/checker
 ```
 
-
 * Training
+    
     For ignoring autoanchor, add `--noautoanchor`.
     * for mcut:
     ```
@@ -36,6 +36,25 @@ python gt_preprocess.py --ori_dir /nfs/Workspace/defect_data/green_crop --output
     * for jarvis:
     ```
     python train.py --enable_seg True
+    ```
+
+* Validation
+
+    A ground truth annotation file of COCO format is required. If there is no such file, please run this command to generate it.
+
+    For example,
+
+    ```
+    python Defect_segmentation/yolov5/utils/coco.py --ann_dir './defect_data/green_crop/annotations' 
+    ```
+
+    The ground truth annotation file will be saved in the `green_crop` directory.
+
+    Next, we can run the following command to evaluate and get mask mAP.
+
+    * for mcut:
+    ```
+    python val.py --data [DATA] --weights [WEIGHTS] --ann-coco-path [ANN_COCO_PATH] --save-pred-coco [SAVE_PRED_COCO]
     ```
 
 ## 1. Dataloader
@@ -106,4 +125,3 @@ At `train.py` line 398
 1. FPS
 2. common use mask mAP
     - [x] `val.py` uses the function `process_batch()` (line 212) to compute bbox IoU and `correct` which is collected in the list `stats` later, and then uses the function `utils.ap_per_class()` (line 236) to compute AP.
-    - [ ] need to modify `process_batch()` to compute mask IoU instead of bbox IoU. Specifically, replace `box_iou()` in `process_batch()` with a function that can compute mask IoU.

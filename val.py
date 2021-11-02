@@ -163,8 +163,13 @@ def run(data,
         loss = torch.zeros(4, device=device)
     else:
         loss = torch.zeros(3, device=device)
+    
+    total_paths, total_masks = [], []  # for coco api
     jdict, stats, ap, ap_class = [], [], [], []
     for batch_i, (img, targets, paths, shapes, masks) in enumerate(tqdm(dataloader, desc=s)):
+        total_paths += paths  # paths: list  # for coco api
+        total_masks.append(masks.detach().cpu().numpy())  # masks: torch.Tensor  # for coco api
+
         t1 = time_sync()
         img = img.to(device, non_blocking=True)
         img = img.half() if half else img.float()  # uint8 to fp16/32
@@ -265,6 +270,17 @@ def run(data,
         for i, c in enumerate(ap_class):
             print(pf % (names[c], seen, nt[c], p[i], r[i], ap50[i], ap[i]))
 
+    # for coco api
+    print('=' * 10 + ' mask mAP ' + '=' * 10)
+    from utils.coco import pred2coco, coco_eval
+
+    total_masks = np.vstack(total_masks).squeeze()  # (N, H, W)
+    total_scores = np.ones([1.0] * len(total_masks))  # (N)
+    coco_gt = COCO(opt.ann_coco_path)
+    coco_dt = pred2coco(coco_gt, total_paths, total_masks, total_scores, opt.save_pred_coco)
+    coco_eval(coco_gt, coco_dt)
+    print('=' * 30)
+
     # Print speeds
     t = tuple(x / seen * 1E3 for x in dt)  # speeds per image
     if not training:
@@ -334,6 +350,9 @@ def parse_opt():
     parser.add_argument('--name', default='exp', help='save to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--half', action='store_true', help='use FP16 half-precision inference')
+    parser.add_argument('--ann-coco-path', type=str, default='/nfs/Workflow/defect_data/green_crop/ann_coco.json', help='path of ground truth annotation of COCO format')
+    parser.add_argument('--save-pred-coco', type=str, help='save prediction of COCO format')
+
     opt = parser.parse_args()
     opt.data = check_yaml(opt.data)  # check YAML
     opt.save_json |= opt.data.endswith('coco.yaml')
