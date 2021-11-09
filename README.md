@@ -8,7 +8,7 @@
 * Try Dice loss, or tuning mask loss gain
 * Support rect training or validation (masks and proto_out size should cautious)
 * Add attention module in Unet
-* Change the upsample to transposeConv
+* Change the upsample to transposeConv (x2 size, 1/2 channel)
 
 ## Action items
 1. Dataloader (V)
