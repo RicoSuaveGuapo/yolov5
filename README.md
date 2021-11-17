@@ -37,8 +37,6 @@ python gt_preprocess.py --ori_dir /nfs/Workspace/defect_data/green_crop --output
 ```
 
 * Training
-    
-    For ignoring autoanchor, add `--noautoanchor`.
     * for mcut:
     ```
     python train.py --enable_seg True --noautoanchor
