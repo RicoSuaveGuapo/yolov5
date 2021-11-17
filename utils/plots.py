@@ -105,13 +105,19 @@ class Annotator:
                 cv2.putText(self.im, label, (p1[0], p1[1] - 2 if outside else p1[1] + h + 2), 0, self.lw / 3, txt_color,
                             thickness=tf, lineType=cv2.LINE_AA)
 
-    def crop_mask(self, mask, box):
-        # crop the mask by bbox
-        x1, y1, x2, y2 = map(int, box)
-        output_mask = np.zeros_like(mask)
-        output_mask[y1:y2, x1:x2] = mask[y1:y2, x1:x2] * 255
-        output_mask = Image.fromarray(output_mask, mode='L')
-        self.draw.bitmap((0, 0), output_mask, fill=(255, 0, 0, 128))
+    def crop_mask(self, mask, box, no_crop=False, is_pred=False):
+        if not no_crop:
+            # crop the mask by bbox
+            x1, y1, x2, y2 = map(int, box)
+            output_mask = np.zeros_like(mask)
+            output_mask[y1:y2, x1:x2] = mask[y1:y2, x1:x2] * 255
+            output_mask = Image.fromarray(output_mask, mode='L')
+            self.draw.bitmap((0, 0), output_mask, fill=(255, 0, 0, 128))
+        else:
+            # if is_pred:
+            #     breakpoint()
+            mask = Image.fromarray(mask * 255, mode='L')
+            self.draw.bitmap((0, 0), mask, fill=(255, 0, 0, 128))
 
     def rectangle(self, xy, fill=None, outline=None, width=1):
         # Add rectangle to image (PIL-only)
@@ -246,7 +252,7 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, mas
                     box = [b - artifact_enlarge_space if i <= 1 else b + artifact_enlarge_space for i, b in enumerate(box)]
                     annotator.box_label(box, label, color=color)
                     if masks is not None:
-                        annotator.crop_mask(mosaic_mask, box)
+                        annotator.crop_mask(mosaic_mask, box, no_crop=True, is_pred=is_pred)
     annotator.im.save(fname)  # save
 
 

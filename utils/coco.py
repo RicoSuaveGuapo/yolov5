@@ -41,8 +41,12 @@ def compute_mask_area(segm, h, w):
 
 def convert_jsons_to_coco_format(opt):
     ann_dir = Path(opt.ann_dir)
-    parent_dir = ann_dir.parents[0]
-    img_dir = parent_dir / 'image'
+    if opt.mode == 'coco':
+        parent_dir = ann_dir.parents[0]
+        img_dir = parent_dir / 'image'
+    elif opt.mode == 'val':
+        img_dir = Path(str(ann_dir).replace('jsons', 'images'))
+        parent_dir = ann_dir.parents[0]
 
     assert img_dir.exists()
     assert img_dir.is_dir()
@@ -102,6 +106,7 @@ def convert_jsons_to_coco_format(opt):
     with coco_file_path.open('w') as f:
         f.write(coco_json)
     
+    opt.ann_coco_path = coco_file_path  # pass the save path
     print(f'save coco file to {str(coco_file_path)}')
 
 
@@ -157,7 +162,7 @@ def bimask2rle(bimask):
     assert isinstance(bimask, np.ndarray)
     assert bimask.ndim == 2, f'expected 2-dim (h, w), but got {bimask.ndim}'
 
-    rle = mask_util.encode(np.array(bimask[:, :, np.newaxis], order='F'))[0]
+    rle = mask_util.encode(np.array(bimask[:, :, np.newaxis], order='F', dtype=np.uint8))[0]
 
     return rle
 
@@ -169,6 +174,8 @@ def pred2coco(coco_gt, paths, bimasks, scores, result_file_path):
 
     assert len(paths) == len(bimasks) == len(scores), \
         f'#paths = {len(paths)}, #bimasks = {len(bimasks)}, #scores = {len(scores)}'
+    if isinstance(result_file_path, Path):
+        result_file_path = str(result_file_path)
 
     json_results = []
     for path, bimask, score in tqdm(zip(paths, bimasks, scores), desc='generating result json'):
@@ -237,6 +244,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--ann_dir', type=str, help='annotation directory')
     parser.add_argument('--show_img', action='store_true')
+    parser.add_argument('--mode', default='coco', help='Mode of creating coco_json')
     opt = parser.parse_args()
 
     check_parser(opt)
