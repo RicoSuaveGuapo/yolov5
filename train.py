@@ -49,6 +49,7 @@ from utils.loggers.wandb.wandb_utils import check_wandb_resume
 from utils.metrics import fitness
 from utils.loggers import Loggers
 from utils.callbacks import Callbacks
+from utils.coco import convert_jsons_to_coco_format, check_parser
 
 LOGGER = logging.getLogger(__name__)
 LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))  # https://pytorch.org/docs/stable/elastic/run.html
@@ -259,6 +260,12 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     model.class_weights = labels_to_class_weights(dataset.labels, nc).to(device) * nc  # attach class weights
     model.names = names
 
+    # Creating mask coco ground truth json and define paths for saving
+    opt.ann_dir = json_val_path  # ground truth json path
+    check_parser(opt)
+    convert_jsons_to_coco_format(opt)  # ground truth coco json will be saved in `opt.ann_coco_path`
+    opt.save_pred_coco = os.path.join(str(save_dir), 'pred_coco.json')  # pass the prediction json path
+
     # Start training
     t0 = time.time()
     nw = max(round(hyp['warmup_epochs'] * nb), 1000)  # number of warmup iterations, max(3 epochs, 1k iterations)
@@ -385,7 +392,8 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                                            plots=True,
                                            callbacks=callbacks,
                                            compute_loss=compute_loss,
-                                           enable_seg=opt.enable_seg)
+                                           enable_seg=opt.enable_seg,
+                                           opt=opt)
 
             # Update best mAP
             fi = fitness(np.array(results).reshape(1, -1))  # weighted combination of [P, R, mAP@.5, mAP@.5-.95]
@@ -449,7 +457,8 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                                             plots=True,
                                             callbacks=callbacks,
                                             compute_loss=compute_loss,  # val best model with plots
-                                            enable_seg=opt.enable_seg)
+                                            enable_seg=opt.enable_seg,
+                                            opt=opt)
 
         callbacks.run('on_train_end', last, best, plots, epoch)
         LOGGER.info(f"Results saved to {colorstr('bold', save_dir)}")
@@ -460,7 +469,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
 def parse_opt(known=False):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', type=str, default=ROOT / 'yolov5s.pt', help='initial weights path')
+    parser.add_argument('--weights', type=str, default='/nfs/Workspace/Defect_segmentation/yolov5_rico/runs/train/exp47/weights/best.pt', help='initial weights path')
     parser.add_argument('--cfg', type=str, default='yolov5s_seg.yaml', help='model.yaml path')
     parser.add_argument('--data', type=str, default=ROOT / 'data/green_data.yaml', help='dataset.yaml path')
     parser.add_argument('--hyp', type=str, default=ROOT / 'data/hyps/hyp.scratch.yaml', help='hyperparameters path')
@@ -495,6 +504,9 @@ def parse_opt(known=False):
     parser.add_argument('--enable_seg', type=str, help='open mask data output')
     parser.add_argument('--mask_loss_type', type=str, default='bce',
                         help='there are ["bce", "dice", "dicebce"] mask loss type')
+    parser.add_argument('--ann-coco-path', type=str, default='/nfs/Workspace/defect_data/defect_seg_dataset/jsons/ann_coco.json', \
+                        help='path to save ground truth annotation of COCO format')
+    parser.add_argument('--mode', default='val', help='Mode of creating coco_json')
 
     # Weights & Biases arguments
     parser.add_argument('--entity', default=None, help='W&B: Entity')
