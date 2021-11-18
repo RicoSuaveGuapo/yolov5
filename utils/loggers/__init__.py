@@ -33,10 +33,17 @@ class Loggers():
         self.hyp = hyp
         self.logger = logger  # for printing results to console
         self.include = include
-        self.keys = ['train/box_loss', 'train/obj_loss', 'train/cls_loss',  # train loss
-                     'metrics/precision', 'metrics/recall', 'metrics/mAP_0.5', 'metrics/mAP_0.5:0.95',  # metrics
-                     'val/box_loss', 'val/obj_loss', 'val/cls_loss',  # val loss
-                     'x/lr0', 'x/lr1', 'x/lr2']  # params
+        self.enable_seg = opt.enable_seg
+        if self.enable_seg:
+            self.keys = ['train/box_loss', 'train/obj_loss', 'train/cls_loss', 'train/mask_loss',  # train loss
+                    'metrics/precision', 'metrics/recall', 'metrics/mAP_0.5', 'metrics/mAP_0.5:0.95',  # metrics
+                    'val/box_loss', 'val/obj_loss', 'val/cls_loss', 'val/mask_loss',  # val loss
+                    'x/lr0', 'x/lr1', 'x/lr2']  # params
+        else:
+            self.keys = ['train/box_loss', 'train/obj_loss', 'train/cls_loss',  # train loss
+                        'metrics/precision', 'metrics/recall', 'metrics/mAP_0.5', 'metrics/mAP_0.5:0.95',  # metrics
+                        'val/box_loss', 'val/obj_loss', 'val/cls_loss',  # val loss
+                        'x/lr0', 'x/lr1', 'x/lr2']  # params
         for k in LOGGERS:
             setattr(self, k, None)  # init empty logger dictionary
         self.csv = True  # always log to csv
@@ -108,8 +115,8 @@ class Loggers():
             n = len(x) + 1  # number of cols
             s = '' if file.exists() else (('%20s,' * n % tuple(['epoch'] + self.keys)).rstrip(',') + '\n')  # add header
             with open(file, 'a') as f:
-                if self.opt.enable_seg:
-                    f.write(s + ('%20.6g,' * n % tuple([epoch] + vals)).rstrip(',') + '\n')
+                if self.enable_seg:
+                    f.write(s + ('%20.7g,' * n % tuple([epoch] + vals)).rstrip(',') + '\n')
                 else:
                     f.write(s + ('%20.5g,' * n % tuple([epoch] + vals)).rstrip(',') + '\n')
 

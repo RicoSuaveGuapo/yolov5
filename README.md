@@ -3,9 +3,17 @@
 * mcut: /nfs/Workspace/Defect_segmentation
 
 ## TODO List
-* Change to DenseConnect Module for segmentation
+
+### Model
+1. Try Unet structure
+
+### Dataloader
 * Add segmentation augmentation in dataloader
+
+### Loss
 * Try Dice loss, or tuning mask loss gain
+
+### Training
 * Support rect training or validation (masks and proto_out size should cautious)
 * Add attention module in Unet
 * Change the upsample to transposeConv (x2 size, 1/2 channel)
@@ -29,35 +37,37 @@ python gt_preprocess.py --ori_dir /nfs/Workspace/defect_data/green_crop --output
 ```
 
 * Training
-    
-    For ignoring autoanchor, add `--noautoanchor`.
     * for mcut:
     ```
-    python train.py --enable_seg True
+    python train.py --enable_seg True --noautoanchor
     ```
     * for jarvis:
     ```
-    python train.py --enable_seg True
+    python train.py --enable_seg True --noautoanchor
     ```
 
 * Validation
+    * In training:
+        A ground truth annotation directory (validation data only) will be read from `data.yaml` (see the parser in `train.py`)
+        A output `ann_coco.json` will be saved in the parent directory of the ground truth annotation directory 
+        A prediction result json will be saved in `runs/exp_name/pred_coco.json`, which will be upadted per epoch
+    
+    * In validation only:
+        A ground truth annotation file of COCO format is required. If there is no such file, please run this command to generate it.
+        For example,
 
-    A ground truth annotation file of COCO format is required. If there is no such file, please run this command to generate it.
+        ```
+        python Defect_segmentation/yolov5/utils/coco.py --ann_dir './defect_data/green_crop/annotations' 
+        ```
 
-    For example,
+        The ground truth annotation file will be saved in the upper parent directory (i.e. `green_crop` in here).
 
-    ```
-    python Defect_segmentation/yolov5/utils/coco.py --ann_dir './defect_data/green_crop/annotations' 
-    ```
+        We can run the following command to evaluate and get mask mAP.
 
-    The ground truth annotation file will be saved in the `green_crop` directory.
-
-    Next, we can run the following command to evaluate and get mask mAP.
-
-    * for mcut:
-    ```
-    python val.py --data [DATA] --weights [WEIGHTS] --ann-coco-path [ANN_COCO_PATH] --save-pred-coco [SAVE_PRED_COCO]
-    ```
+        * for mcut:
+        ```
+        python val.py --data [DATA] --weights [WEIGHTS] --ann-coco-path [ANN_COCO_PATH] --save-pred-coco [SAVE_PRED_COCO]
+        ```
 
 ## 1. Dataloader
 ### Process
@@ -120,7 +130,7 @@ DONE
 * train image visualization code is in `utils/loggers/__init__.py`
 
 ### Progress
-At `train.py` line 398
+DONE
     
 
 ## 4. Metric

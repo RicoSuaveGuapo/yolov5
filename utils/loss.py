@@ -5,6 +5,7 @@ Loss functions
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from utils.metrics import bbox_iou
 from utils.torch_utils import is_parallel
@@ -88,9 +89,68 @@ class QFocalLoss(nn.Module):
             return loss
 
 
+class DiceBCELoss(nn.Module):
+    def __init__(self, is_sigmoid=False):
+        super(DiceBCELoss, self).__init__()
+        self.is_sigmoid = is_sigmoid
+
+    def forward(self, inputs, targets, smooth=1):
+        
+        if not self.is_sigmoid:
+            dice_inputs = inputs.sigmoid()
+        
+        #flatten label and prediction tensors
+        dice_inputs = dice_inputs.view(-1)
+        dice_targets = targets.view(-1)
+        
+        intersection = (dice_inputs * dice_targets).sum()                            
+        dice_loss = 1 - (2.*intersection + smooth)/(dice_inputs.sum() + dice_targets.sum() + smooth)  
+        BCE = F.binary_cross_entropy_with_logits(inputs, targets)
+        Dice_BCE = BCE + dice_loss
+        
+        return Dice_BCE
+
+
+class DiceLoss(nn.Module):
+    def __init__(self, is_sigmoid=False):
+        super(DiceLoss, self).__init__()
+        self.is_sigmoid = is_sigmoid
+
+    def forward(self, inputs, targets, smooth=1):
+        if not self.is_sigmoid:
+            inputs = inputs.sigmoid()
+        
+        #flatten label and prediction tensors
+        inputs = inputs.view(-1)
+        targets = targets.view(-1)
+        
+        intersection = (inputs * targets).sum()                            
+        dice = (2.*intersection + smooth)/(inputs.sum() + targets.sum() + smooth)  
+        
+        return 1 - dice
+
+
+class Maskloss(nn.Module):
+    def __init__(self, mask_loss_type:str, pos_weight=None):
+        super().__init__()
+        mask_loss_type = mask_loss_type.lower()
+        assert mask_loss_type in ['bce', 'dice', 'dicebce']
+        if mask_loss_type == 'bce':
+            self.loss = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+        elif mask_loss_type == 'dice':
+            self.loss = DiceLoss()
+        elif mask_loss_type == 'dicebce':
+            self.loss = DiceBCELoss()
+        else:
+            raise NotImplementedError('Mask loss not supported')
+
+    def forward(self, inputs, targets):
+        return self.loss(inputs, targets)
+
+
 class ComputeLoss:
     # Compute losses
-    def __init__(self, model, autobalance=False, enable_seg=False):
+    def __init__(self, model, autobalance=False, enable_seg=False, mask_loss_type='bce'):
         self.sort_obj_iou = False
         device = next(model.parameters()).device  # get model device
         h = model.hyp  # hyperparameters
@@ -100,7 +160,7 @@ class ComputeLoss:
         BCEcls = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([h['cls_pw']], device=device))
         BCEobj = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([h['obj_pw']], device=device))
         if self.enable_seg:
-            self.BCEmask = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([h['mask_pw']], device=device))
+            self.maskloss = Maskloss(mask_loss_type, pos_weight=torch.tensor([h['mask_pw']], device=device))
 
         # Class label smoothing https://arxiv.org/pdf/1902.04103.pdf eqn 3
         self.cp, self.cn = smooth_BCE(eps=h.get('label_smoothing', 0.0))  # positive, negative BCE targets
@@ -159,7 +219,7 @@ class ComputeLoss:
 
                 # Mask
                 if self.enable_seg:
-                    lmask += self.BCEmask(proto_out[b], masks[b])
+                    lmask += self.maskloss(proto_out[b], masks[b])
 
                 # Append targets to text file
                 # with open('targets.txt', 'a') as file:

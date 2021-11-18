@@ -16,6 +16,8 @@ from threading import Thread
 import numpy as np
 import torch
 from tqdm import tqdm
+from pycocotools.coco import COCO
+from pycocotools.cocoeval import COCOeval
 
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[0]  # YOLOv5 root directory
@@ -27,11 +29,12 @@ from models.experimental import attempt_load
 from utils.datasets import create_dataloader
 from utils.general import coco80_to_coco91_class, check_dataset, check_img_size, check_requirements, \
     check_suffix, check_yaml, box_iou, non_max_suppression, scale_coords, xyxy2xywh, xywh2xyxy, set_logging, \
-    increment_path, colorstr, print_args
+    increment_path, colorstr, print_args, create_insts_mask
 from utils.metrics import ap_per_class, ConfusionMatrix
 from utils.plots import output_to_target, plot_images, plot_val_study
 from utils.torch_utils import select_device, time_sync
 from utils.callbacks import Callbacks
+from utils.coco import pred2coco, coco_eval
 
 
 def save_one_txt(predn, save_conf, shape, file):
@@ -106,7 +109,9 @@ def run(data,
         plots=True,
         callbacks=Callbacks(),
         compute_loss=None,
-        enable_seg=False
+        enable_seg=False,
+        mask_conf_threshold=0.5,
+        opt=None  # parser from train.py
         ):
     # Initialize/load model and set device
     training = model is not None
@@ -166,6 +171,7 @@ def run(data,
     
     total_paths, total_masks = [], []  # for coco api
     jdict, stats, ap, ap_class = [], [], [], []
+    totoal_paths, total_bimasks, total_scores = [], [], []  # for coco api
     for batch_i, (img, targets, paths, shapes, masks) in enumerate(tqdm(dataloader, desc=s)):
         total_paths += paths  # paths: list  # for coco api
         total_masks.append(masks.detach().cpu().numpy())  # masks: torch.Tensor  # for coco api
@@ -203,6 +209,8 @@ def run(data,
         dt[2] += time_sync() - t3
 
         # Statistics per image
+        # coco_bboxes_conf_list = []
+        # coco_insts_masks_list = []
         for si, pred in enumerate(out):
             labels = targets[targets[:, 0] == si, 1:]
             nl = len(labels)
@@ -233,6 +241,13 @@ def run(data,
                 correct = torch.zeros(pred.shape[0], niou, dtype=torch.bool)
             stats.append((correct.cpu(), pred[:, 4].cpu(), pred[:, 5].cpu(), tcls))  # (correct, conf, pcls, tcls)
 
+            # Creating
+            # 1. prediction of instance-mask: [[inst_mask_1, inst_mask_2, ...], ... ] length bz
+            # 2. corresponding bbox scores: [[det_conf_1, det_conf_2, ...], ... ] length bz
+            # for coco api
+            # coco_insts_masks_list.append(create_insts_mask(pred[:, :4].cpu().numpy(), masks[si], mask_conf_threshold))
+            # coco_bboxes_conf_list.append(pred[:, 4].cpu().numpy())
+
             # Save/log
             if save_txt:
                 save_one_txt(predn, save_conf, shape, file=save_dir / 'labels' / (path.stem + '.txt'))
@@ -249,7 +264,8 @@ def run(data,
             Thread(target=plot_images, args=(img, targets, paths, f, names, masks), daemon=True).start()
             f = save_dir / f'val_batch{batch_i}_pred.jpg'  # predictions
             Thread(target=plot_images, args=(img, output_to_target(out), paths, f, names, proto_out, 1920, 16, True), daemon=True).start()
-        break
+            # plot_images(img, output_to_target(out), paths, f, names, proto_out, 1920, 16, True)
+            # breakpoint()
 
     # Compute statistics
     stats = [np.concatenate(x, 0) for x in zip(*stats)]  # to numpy
@@ -272,10 +288,8 @@ def run(data,
 
     # for coco api
     print('=' * 10 + ' mask mAP ' + '=' * 10)
-    from utils.coco import pred2coco, coco_eval
-
     total_masks = np.vstack(total_masks).squeeze()  # (N, H, W)
-    total_scores = np.ones([1.0] * len(total_masks))  # (N)
+    total_scores = np.array([1.0] * len(total_masks))  # (N)
     coco_gt = COCO(opt.ann_coco_path)
     coco_dt = pred2coco(coco_gt, total_paths, total_masks, total_scores, opt.save_pred_coco)
     coco_eval(coco_gt, coco_dt)
@@ -303,8 +317,6 @@ def run(data,
 
         try:  # https://github.com/cocodataset/cocoapi/blob/master/PythonAPI/pycocoEvalDemo.ipynb
             check_requirements(['pycocotools'])
-            from pycocotools.coco import COCO
-            from pycocotools.cocoeval import COCOeval
 
             anno = COCO(anno_json)  # init annotations api
             pred = anno.loadRes(pred_json)  # init predictions api
@@ -350,8 +362,10 @@ def parse_opt():
     parser.add_argument('--name', default='exp', help='save to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--half', action='store_true', help='use FP16 half-precision inference')
-    parser.add_argument('--ann-coco-path', type=str, default='/nfs/Workflow/defect_data/green_crop/ann_coco.json', help='path of ground truth annotation of COCO format')
+    parser.add_argument('--ann-coco-path', type=str, default='/nfs/Workflow/defect_data/green_crop/ann_coco.json',
+                        help='path of ground truth annotation of COCO format')
     parser.add_argument('--save-pred-coco', type=str, help='save prediction of COCO format')
+    parser.add_argument('--mode', default='val', help='Mode of creating coco_json')
 
     opt = parser.parse_args()
     opt.data = check_yaml(opt.data)  # check YAML
