@@ -18,6 +18,10 @@ import torch.nn as nn
 from PIL import Image
 from torch.cuda import amp
 
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+
 from utils.datasets import exif_transpose, letterbox
 from utils.general import colorstr, increment_path, make_divisible, non_max_suppression, save_one_box, \
     scale_coords, xyxy2xywh
@@ -139,17 +143,23 @@ class C3(nn.Module):
 
 
 class ProtoNet(nn.Module):
-    def __init__(self, c1, channels=[128, 64, 1], scale_factor=2):
+    def __init__(self, c1, channels=[128, 32, 8, 1], scale_factor=2):
         super().__init__()
-        self.upsample = nn.Upsample(scale_factor=scale_factor, mode='bilinear', align_corners=False)
+        # self.upsampler = nn.Upsample(scale_factor=scale_factor, mode='bilinear', align_corners=False)
+        self.upsampler = nn.ModuleList([nn.ConvTranspose2d(channels[i], channels[i], 3, 
+                                                           stride=2, padding=1, output_padding=1)
+                                                           for i in range(int(math.log2(8)))]
+                                       )
+        channels.insert(0, c1)
         self.protonet = nn.Sequential(
             OrderedDict([
-                ('c3_1', C3(c1, channels[0])),  # 128, h/8, w/8 
-                ('up_1', self.upsample),        # 128, h/4, w/4
-                ('c3_2', C3(channels[0], channels[1])),  # 64, h/4, w/4
-                ('up_2', self.upsample),        # 64, h/2, w/2
-                ('dwc', DWConv(channels[1], channels[-1])),  # 1, h/2, w/2
-                ('up_3', self.upsample),        # 1, h, w
+                ('c3_1', C3(channels[0], channels[1])),     # 128, h/8, w/8 
+                ('up_1', self.upsampler[0]),                # 128, h/4, w/4
+                ('c3_2', C3(channels[1], channels[2])),     # 64, h/4, w/4
+                ('up_2', self.upsampler[1]),                # 64, h/2, w/2
+                ('c3_3', C3(channels[2], channels[3])),     # 32, h/2, w/2
+                ('up_3', self.upsampler[2]),                # 32, h, w
+                ('dwc', DWConv(channels[3], channels[4])),  # 1,  h, w
             ]))
 
     def forward(self, x):
