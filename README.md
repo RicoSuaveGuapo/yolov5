@@ -1,28 +1,8 @@
-# Working spaces
+# Progress Log
+
+## Working spaces
 * jarvis: /usr/AI/Defect_segmentation
 * mcut: /nfs/Workspace/Defect_segmentation
-
-## TODO List
-
-### Model
-1. Try Unet structure
-
-### Dataloader
-* Add segmentation augmentation in dataloader
-
-### Loss
-* Try Dice loss, or tuning mask loss gain
-
-### Training
-* Support rect training or validation (masks and proto_out size should cautious)
-* Add attention module in Unet
-* Change the upsample to transposeConv (x2 size, 1/2 channel)
-
-## Action items
-1. Dataloader (V)
-2. Model (V)
-3. Inference (V)
-4. Metric (V)
 
 ### Code Snippet
 * Preprocess data:
@@ -68,6 +48,32 @@ python gt_preprocess.py --ori_dir /nfs/Workspace/defect_data/green_crop --output
         ```
         python val.py --data [DATA] --weights [WEIGHTS] --ann-coco-path [ANN_COCO_PATH] --save-pred-coco [SAVE_PRED_COCO]
         ```
+
+## TODO List
+
+### Action items
+1. Dataloader (-)
+    * Various augmentation
+2. Model (-)
+    * Unet
+    * anchor-base
+    * loss
+3. Public dataset (-)
+
+### Dataloader
+* Add segmentation augmentation in dataloader
+### Model
+* Try Unet structure
+    * Short-cut
+    * Transpose-conv -> Upsampling
+### Loss
+* Try Dice loss, and/or tuning mask loss gain
+* Use Focal loss
+
+### Training
+* Support rect training or validation (masks and proto_out size should cautious)
+* Add attention module in Unet
+* Change the upsample to transposeConv (x2 size, 1/2 channel)
 
 ## 1. Dataloader
 ### Process

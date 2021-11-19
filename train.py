@@ -469,7 +469,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
 def parse_opt(known=False):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', type=str, default='/nfs/Workspace/Defect_segmentation/yolov5_rico/runs/train/exp47/weights/best.pt', help='initial weights path')
+    parser.add_argument('--weights', type=str, default='yolov5s.pt', help='initial weights path')
     parser.add_argument('--cfg', type=str, default='yolov5s_seg.yaml', help='model.yaml path')
     parser.add_argument('--data', type=str, default=ROOT / 'data/green_data.yaml', help='dataset.yaml path')
     parser.add_argument('--hyp', type=str, default=ROOT / 'data/hyps/hyp.scratch.yaml', help='hyperparameters path')
