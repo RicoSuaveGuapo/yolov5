@@ -6,25 +6,25 @@
 
 ### Code Snippet
 * Preprocess data:
-jarvis
-```
-python gt_preprocess.py --ori_dir /usr/AI/defect_data/green_crop --output_dir /usr/AI/defect_data/defect_seg_dataset --check_dir /usr/AI/defect_data/checker
-```
+    jarvis
+    ```
+    python gt_preprocess.py --ori_dir /usr/AI/defect_data/green_crop --output_dir /usr/AI/defect_data/defect_seg_dataset --check_dir /usr/AI/defect_data/checker
+    ```
 
-mcut
-```
-python gt_preprocess.py --ori_dir /nfs/Workspace/defect_data/green_crop --output_dir /nfs/Workspace/defect_data/defect_seg_dataset --check_dir /nfs/Workspace/defect_data/checker
-```
+    mcut
+    ```
+    python gt_preprocess.py --ori_dir /nfs/Workspace/defect_data/green_crop --output_dir /nfs/Workspace/defect_data/defect_seg_dataset --check_dir /nfs/Workspace/defect_data/checker
+    ```
 
 * Training
     * for mcut:
-    ```
-    python train.py --enable_seg True --noautoanchor
-    ```
+        ```
+        python train.py --enable_seg --noautoanchor
+        ```
     * for jarvis:
-    ```
-    python train.py --enable_seg True --noautoanchor
-    ```
+        ```
+        python train.py --enable_seg --noautoanchor
+        ```
 
 * Validation
     * In training:
@@ -55,7 +55,7 @@ python gt_preprocess.py --ori_dir /nfs/Workspace/defect_data/green_crop --output
 1. Dataloader (-)
     * Various augmentation
 2. Model (-)
-    * Unet
+    * Unet (V)
     * anchor-base
     * loss
 3. Public dataset (-)
@@ -63,7 +63,7 @@ python gt_preprocess.py --ori_dir /nfs/Workspace/defect_data/green_crop --output
 ### Dataloader
 * Add segmentation augmentation in dataloader
 ### Model
-* Try Unet structure
+* Try Unet structure (V)
     * Short-cut
     * Transpose-conv -> Upsampling
 ### Loss

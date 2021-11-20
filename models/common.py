@@ -143,27 +143,42 @@ class C3(nn.Module):
 
 
 class ProtoNet(nn.Module):
-    def __init__(self, c1, channels=[128, 32, 8, 1], scale_factor=2):
+    def __init__(self, c1,
+                 c3_in_channel=[128, 64, 32],
+                 c3_out_channel=[64, 32, 16],
+                 size_gain=8):
         super().__init__()
-        # self.upsampler = nn.Upsample(scale_factor=scale_factor, mode='bilinear', align_corners=False)
-        self.upsampler = nn.ModuleList([nn.ConvTranspose2d(channels[i], channels[i], 3, 
+        '''
+        Note that the below is only modified for yolov5s model configuration
+        c3_in/out_channel: the order is from bottom to top, i.e. the last element's
+                           feature map is the largest
+        '''
+        scale_factor = int(math.log2(size_gain))
+        assert scale_factor == len(c3_out_channel), 'size gain is not consistent to up_out_channel list length'
+        assert c1 == c3_in_channel[0], 'For now, ProtoNet only support yolov5s model configuration'
+        up_in_channel, up_out_channel = c3_in_channel, c3_out_channel
+        self.upsampler = nn.ModuleList([nn.ConvTranspose2d(up_in_channel[i], up_out_channel[i], 3, 
                                                            stride=2, padding=1, output_padding=1)
-                                                           for i in range(int(math.log2(8)))]
-                                       )
-        channels.insert(0, c1)
-        self.protonet = nn.Sequential(
-            OrderedDict([
-                ('c3_1', C3(channels[0], channels[1])),     # 128, h/8, w/8 
-                ('up_1', self.upsampler[0]),                # 128, h/4, w/4
-                ('c3_2', C3(channels[1], channels[2])),     # 64, h/4, w/4
-                ('up_2', self.upsampler[1]),                # 64, h/2, w/2
-                ('c3_3', C3(channels[2], channels[3])),     # 32, h/2, w/2
-                ('up_3', self.upsampler[2]),                # 32, h, w
-                ('dwc', DWConv(channels[3], channels[4])),  # 1,  h, w
-            ]))
+                                                           for i in range(scale_factor)])
+        self.c3 = nn.ModuleList([C3(c3_in_channel[i], c3_out_channel[i]) for i in range(scale_factor)])
+        self.c3_ori = C3(3, c3_out_channel[-1])  # for conv the original image
+        self.dw = DWConv(c3_out_channel[-1], 1)
 
-    def forward(self, x):
-        return self.protonet(x)
+    def upsample_c3(self, x, i, shortcut):
+        upsample_x = self.upsampler[i](x)
+        y = self.process_shortcut(upsample_x, i, shortcut)
+        return self.c3[i](y)
+
+    def process_shortcut(self, upsample_x, i, shortcut):
+        if i == len(self.upsampler) - 1:
+            shortcut = self.c3_ori(shortcut)  # for conv the original image
+        # if one wish to use Unet++ structure, can modifiy from here
+        return torch.cat((shortcut, upsample_x), dim=1)
+
+    def forward(self, x, shortcut_list:list):
+        for i, shortcut in enumerate(shortcut_list):
+            x = self.upsample_c3(x, i, shortcut)
+        return self.dw(x)
 
 
 class C3TR(C3):
@@ -503,8 +518,9 @@ class Classify(nn.Module):
 
 
 if __name__ == "__main__":
-    x = torch.zeros((8, 256, 80, 80))
-    protonet = ProtoNet(c1=256)
+    x = torch.zeros((8, 128, 80, 80))
+    shortcut_list = [torch.zeros(8, 64, 160, 160), torch.zeros(8, 32, 320, 320), torch.zeros(8, 3, 640, 640)]
+    protonet = ProtoNet(c1=x.size(1))
     print(protonet)
-    y = protonet(x)
+    y = protonet(x, shortcut_list)
     print(y.size())  # (8, 1, 640, 640)

@@ -147,10 +147,17 @@ class Model(nn.Module):
 
     def _forward_once(self, x, profile=False, visualize=False):
         y, dt = [], []  # outputs
+        ori_x = x.clone()  # will be used in shortcut connection to Protonet
         for m in self.model:
             if isinstance(m, ProtoNet):
-                proto_in = y[m.f]
-                proto_out = m(proto_in)
+                # if isinstance(m.f, int):
+                #     proto_in = y[m.f]
+                #     proto_out = m(proto_in)
+                # elif isinstance(m.f, list):
+                from_neck_index = m.f[0]
+                shortcut_list = [y[f] for f in m.f if f != from_neck_index] + [ori_x]  # the order matter
+                proto_in = y[from_neck_index]
+                proto_out = m(proto_in, shortcut_list)
                 continue
             if m.f != -1:  # if not from previous layer
                 x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]  # from earlier layers
@@ -294,19 +301,20 @@ def parse_model(d, ch, enable_seg=False):  # model_dict, input_channels(3)
 
         n = n_ = max(round(n * gd), 1) if n > 1 else n  # depth gain
         if m in [Conv, GhostConv, Bottleneck, GhostBottleneck, SPP, SPPF, DWConv, MixConv2d, Focus, CrossConv,
-                 BottleneckCSP, C3, C3TR, C3SPP, C3Ghost, ProtoNet]:
+                 BottleneckCSP, C3, C3TR, C3SPP, C3Ghost]:
             c1, c2 = ch[f], args[0]
-            if c2 != no and not (m is ProtoNet):  # if not output and not ProtoNet
+            if c2 != no:  # if not output
                 c2 = make_divisible(c2 * gw, 8)
-
-            if m is not ProtoNet:
-                args = [c1, c2, *args[1:]]
-            else:
-                # the seg module doesn't need extra arg
-                args = [c1]
+            args = [c1, c2, *args[1:]]
             if m in [BottleneckCSP, C3, C3TR, C3Ghost]:
                 args.insert(2, n)  # number of repeats
                 n = 1
+        elif m is ProtoNet:
+            # if isinstance(f, int):
+            #     args = [ch[f]]
+            # elif isinstance(f, list):
+            from_neck_index = f[0]
+            args = [ch[from_neck_index]]
         elif m is nn.BatchNorm2d:
             args = [ch[f]]
         elif m is Concat:
