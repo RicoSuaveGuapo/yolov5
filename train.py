@@ -501,7 +501,7 @@ def parse_opt(known=False):
     parser.add_argument('--freeze', type=int, default=0, help='Number of layers to freeze. backbone=10, all=24')
     parser.add_argument('--save-period', type=int, default=-1, help='Save checkpoint every x epochs (disabled if < 1)')
     parser.add_argument('--local_rank', type=int, default=-1, help='DDP parameter, do not modify')
-    parser.add_argument('--enable_seg', type=str, help='open mask data output')
+    parser.add_argument('--enable_seg', action='store_true', help='open mask data output')
     parser.add_argument('--mask_loss_type', type=str, default='dicebce',
                         help='there are ["bce", "dice", "dicebce"] mask loss type')
     parser.add_argument('--ann-coco-path', type=str, default='/nfs/Workspace/defect_data/defect_seg_dataset/jsons/ann_coco.json', \
