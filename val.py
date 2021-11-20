@@ -171,7 +171,7 @@ def run(data,
     
     # total_paths, total_masks = [], []  # for coco api
     jdict, stats, ap, ap_class = [], [], [], []
-    total_paths, total_gt_bimasks, total_dt_bimasks, total_scores = [], [], []  # for coco api
+    total_paths, total_gt_bimasks, total_dt_bimasks, total_scores = [], [], [], []  # for coco api
     for batch_i, (img, targets, paths, shapes, masks) in enumerate(tqdm(dataloader, desc=s)):
         total_paths += paths  # paths: list  # for coco api
         total_gt_bimasks.append(masks.detach().cpu().numpy())  # masks: torch.Tensor  # for coco api
