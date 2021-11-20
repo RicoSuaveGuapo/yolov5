@@ -30,7 +30,7 @@ from utils.datasets import create_dataloader
 from utils.general import coco80_to_coco91_class, check_dataset, check_img_size, check_requirements, \
     check_suffix, check_yaml, box_iou, non_max_suppression, scale_coords, xyxy2xywh, xywh2xyxy, set_logging, \
     increment_path, colorstr, print_args, create_insts_mask
-from utils.metrics import ap_per_class, ConfusionMatrix
+from utils.metrics import ap_per_class, ConfusionMatrix, calculate_mask_miou
 from utils.plots import output_to_target, plot_images, plot_val_study
 from utils.torch_utils import select_device, time_sync
 from utils.callbacks import Callbacks
@@ -169,12 +169,12 @@ def run(data,
     else:
         loss = torch.zeros(3, device=device)
     
-    total_paths, total_masks = [], []  # for coco api
+    # total_paths, total_masks = [], []  # for coco api
     jdict, stats, ap, ap_class = [], [], [], []
-    totoal_paths, total_bimasks, total_scores = [], [], []  # for coco api
+    total_paths, total_gt_bimasks, total_dt_bimasks, total_scores = [], [], [], []  # for coco api
     for batch_i, (img, targets, paths, shapes, masks) in enumerate(tqdm(dataloader, desc=s)):
         total_paths += paths  # paths: list  # for coco api
-        total_masks.append(masks.detach().cpu().numpy())  # masks: torch.Tensor  # for coco api
+        total_gt_bimasks.append(masks.detach().cpu().numpy())  # masks: torch.Tensor  # for coco api
 
         t1 = time_sync()
         img = img.to(device, non_blocking=True)
@@ -190,6 +190,8 @@ def run(data,
         # Run model
         if enable_seg:
             (out, train_out), proto_out = model(img, augment=augment)  # ((inference and training outputs), seg output)
+            dt_bimasks = np.where(proto_out.cpu().numpy() > mask_conf_threshold, 1, 0)
+            total_dt_bimasks.append(dt_bimasks)
         else:
             out, train_out = model(img, augment=augment)  # inference and training outputs
         dt[1] += time_sync() - t2
@@ -286,12 +288,19 @@ def run(data,
         for i, c in enumerate(ap_class):
             print(pf % (names[c], seen, nt[c], p[i], r[i], ap50[i], ap[i]))
 
+    # for mIoU
+    print('=' * 10 + ' mIoU ' + '=' * 10)
+    total_gt_bimasks = np.vstack(total_gt_bimasks).squeeze()  # (N, H, W)
+    total_dt_bimasks = np.vstack(total_dt_bimasks).squeeze()  # (N, H, W)
+    miou = calculate_mask_miou(total_gt_bimasks, total_dt_bimasks)
+    print('mIoU = {:.3f}'.format(miou))
+    print('=' * 30)
+    
     # for coco api
     print('=' * 10 + ' mask mAP ' + '=' * 10)
-    total_masks = np.vstack(total_masks).squeeze()  # (N, H, W)
-    total_scores = np.array([1.0] * len(total_masks))  # (N)
+    total_scores = np.array([1.0] * len(total_dt_bimasks))  # (N)
     coco_gt = COCO(opt.ann_coco_path)
-    coco_dt = pred2coco(coco_gt, total_paths, total_masks, total_scores, opt.save_pred_coco)
+    coco_dt = pred2coco(coco_gt, total_paths, total_dt_bimasks, total_scores, opt.save_pred_coco)
     coco_eval(coco_gt, coco_dt)
     print('=' * 30)
 

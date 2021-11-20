@@ -289,6 +289,21 @@ def wh_iou(wh1, wh2):
     return inter / (wh1.prod(2) + wh2.prod(2) - inter)  # iou = inter / (area1 + area2 - inter)
 
 
+def calculate_mask_miou(masks1: np.ndarray, masks2: np.ndarray) -> float:
+    assert len(masks1) == len(masks2), f'# of mask1 = {len(masks1)}, # of masks2 = {len(masks2)}'
+    n = len(masks1)
+
+    masks1 = masks1.reshape(n, -1)  # (N, H*W)
+    masks2 = masks2.reshape(n, -1)  # (N, H*W)
+
+    inter = (masks1 * masks2).sum(axis=-1)  # (N,)
+    union = masks1.sum(axis=-1) + masks2.sum(axis=-1) - inter
+    ious = inter / union
+    miou = np.nanmean(ious).item()
+
+    return miou
+
+
 # Plots ----------------------------------------------------------------------------------------------------------------
 
 def plot_pr_curve(px, py, ap, save_dir='pr_curve.png', names=()):
