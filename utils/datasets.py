@@ -565,6 +565,8 @@ class LoadImagesAndLabels(Dataset):
                 ori_mask = self.mask_files[index]
                 mask = resize_mask(self, ori_mask, output_size=(h, w))
                 mask = torch.from_numpy(mask.astype(np.float))
+                # If wish to use the artificial square for mAP sanity check, uncomment below
+                # mask[:400, :400] = 1
             else:
                 mask = None
 
@@ -629,7 +631,7 @@ class LoadImagesAndLabels(Dataset):
         img, label, path, shapes, mask = zip(*batch)  # transposed
         for i, l in enumerate(label):
             l[:, 0] = i  # add target image index for build_targets()
-        if mask is not None:
+        if mask[0] is not None:
             return torch.stack(img, 0), torch.cat(label, 0), path, shapes, torch.stack(mask, 0).unsqueeze(1)
         else:
             return torch.stack(img, 0), torch.cat(label, 0), path, shapes, None

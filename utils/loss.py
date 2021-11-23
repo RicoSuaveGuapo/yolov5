@@ -35,7 +35,7 @@ class BCEBlurWithLogitsLoss(nn.Module):
 
 class FocalLoss(nn.Module):
     # Wraps focal loss around existing loss_fcn(), i.e. criteria = FocalLoss(nn.BCEWithLogitsLoss(), gamma=1.5)
-    def __init__(self, loss_fcn, gamma=1.5, alpha=0.25):
+    def __init__(self, loss_fcn, gamma=3, alpha=0.75):
         super(FocalLoss, self).__init__()
         self.loss_fcn = loss_fcn  # must be nn.BCEWithLogitsLoss()
         self.gamma = gamma
@@ -134,13 +134,15 @@ class Maskloss(nn.Module):
     def __init__(self, mask_loss_type:str, pos_weight=None):
         super().__init__()
         mask_loss_type = mask_loss_type.lower()
-        assert mask_loss_type in ['bce', 'dice', 'dicebce']
+        assert mask_loss_type in ['bce', 'dice', 'dicebce', 'focalloss']
         if mask_loss_type == 'bce':
             self.loss = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
         elif mask_loss_type == 'dice':
             self.loss = DiceLoss()
         elif mask_loss_type == 'dicebce':
             self.loss = DiceBCELoss()
+        elif mask_loss_type == 'focalloss':
+            self.loss = FocalLoss(nn.BCEWithLogitsLoss(pos_weight=pos_weight))
         else:
             raise NotImplementedError('Mask loss not supported')
 
@@ -188,6 +190,10 @@ class ComputeLoss:
         if self.enable_seg:
             lmask = torch.zeros(1, device=device)  # init
 
+        # Mask
+        if self.enable_seg:
+            lmask += self.maskloss(proto_out, masks)
+
         # Losses
         for i, pi in enumerate(p):  # layer index, layer predictions
             b, a, gj, gi = indices[i]  # image, anchor, gridy, gridx
@@ -216,10 +222,6 @@ class ComputeLoss:
                     t = torch.full_like(ps[:, 5:], self.cn, device=device)  # targets
                     t[range(n), tcls[i]] = self.cp
                     lcls += self.BCEcls(ps[:, 5:], t)  # BCE
-
-                # Mask
-                if self.enable_seg:
-                    lmask += self.maskloss(proto_out[b], masks[b])
 
                 # Append targets to text file
                 # with open('targets.txt', 'a') as file:

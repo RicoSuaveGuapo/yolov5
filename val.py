@@ -110,7 +110,7 @@ def run(data,
         callbacks=Callbacks(),
         compute_loss=None,
         enable_seg=False,
-        mask_conf_threshold=0.5,
+        mask_conf_threshold=0.4,
         opt=None  # parser from train.py
         ):
     # Initialize/load model and set device
@@ -174,7 +174,8 @@ def run(data,
     total_paths, total_gt_bimasks, total_dt_bimasks, total_scores = [], [], [], []  # for coco api
     for batch_i, (img, targets, paths, shapes, masks) in enumerate(tqdm(dataloader, desc=s)):
         total_paths += paths  # paths: list  # for coco api
-        total_gt_bimasks.append(masks.detach().cpu().numpy())  # masks: torch.Tensor  # for coco api
+        if enable_seg:
+            total_gt_bimasks.append(masks.detach().cpu().numpy())  # masks: torch.Tensor  # for coco api
 
         t1 = time_sync()
         img = img.to(device, non_blocking=True)
@@ -190,7 +191,7 @@ def run(data,
         # Run model
         if enable_seg:
             (out, train_out), proto_out = model(img, augment=augment)  # ((inference and training outputs), seg output)
-            dt_bimasks = np.where(proto_out.cpu().numpy() > mask_conf_threshold, 1, 0)
+            dt_bimasks = np.where(proto_out.sigmoid().cpu().numpy() > mask_conf_threshold, 1, 0)
             total_dt_bimasks.append(dt_bimasks)
         else:
             out, train_out = model(img, augment=augment)  # inference and training outputs
@@ -289,20 +290,21 @@ def run(data,
             print(pf % (names[c], seen, nt[c], p[i], r[i], ap50[i], ap[i]))
 
     # for mIoU
-    print('=' * 10 + ' mIoU ' + '=' * 10)
-    total_gt_bimasks = np.vstack(total_gt_bimasks).squeeze()  # (N, H, W)
-    total_dt_bimasks = np.vstack(total_dt_bimasks).squeeze()  # (N, H, W)
-    miou = calculate_mask_miou(total_gt_bimasks, total_dt_bimasks)
-    print('mIoU = {:.3f}'.format(miou))
-    print('=' * 30)
-    
-    # for coco api
-    print('=' * 10 + ' mask mAP ' + '=' * 10)
-    total_scores = np.array([1.0] * len(total_dt_bimasks))  # (N)
-    coco_gt = COCO(opt.ann_coco_path)
-    coco_dt = pred2coco(coco_gt, total_paths, total_dt_bimasks, total_scores, opt.save_pred_coco)
-    coco_eval(coco_gt, coco_dt)
-    print('=' * 30)
+    if enable_seg:
+        print('=' * 10 + ' mIoU ' + '=' * 10)
+        total_gt_bimasks = np.vstack(total_gt_bimasks).squeeze()  # (N, H, W)
+        total_dt_bimasks = np.vstack(total_dt_bimasks).squeeze()  # (N, H, W)
+        miou = calculate_mask_miou(total_gt_bimasks, total_dt_bimasks)
+        print('mIoU = {:.3f}'.format(miou))
+        print('=' * 30)
+        
+        # for coco api
+        print('=' * 10 + ' mask mAP ' + '=' * 10)
+        total_scores = np.array([1.0] * len(total_dt_bimasks))  # (N)
+        coco_gt = COCO(opt.ann_coco_path)
+        coco_dt = pred2coco(coco_gt, total_paths, total_dt_bimasks, total_scores, opt.save_pred_coco)
+        coco_eval(coco_gt, coco_dt)
+        print('=' * 30)
 
     # Print speeds
     t = tuple(x / seen * 1E3 for x in dt)  # speeds per image

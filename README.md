@@ -57,18 +57,21 @@
 2. Model (-)
     * Unet (V)
     * anchor-base
-    * loss
-3. Public dataset (-)
+    * loss (V)
 
 ### Dataloader
 * Add segmentation augmentation in dataloader
 ### Model
-* Try Unet structure (V)
-    * Short-cut
-    * Transpose-conv -> Upsampling
+* Try Unet structure
+    * Short-cut (V)
+    * Transpose-conv -> Upsampling (V)
+    * anchor-base
 ### Loss
-* Try Dice loss, and/or tuning mask loss gain
-* Use Focal loss
+* Try Dice loss, and/or tuning mask loss gain (V)
+* Use Focal loss (V)
+
+#### Note
+BCE loss is useable for large artifial 
 
 ### Training
 * Support rect training or validation (masks and proto_out size should cautious)

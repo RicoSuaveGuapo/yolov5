@@ -114,8 +114,6 @@ class Annotator:
             output_mask = Image.fromarray(output_mask, mode='L')
             self.draw.bitmap((0, 0), output_mask, fill=(255, 0, 0, 128))
         else:
-            # if is_pred:
-            #     breakpoint()
             mask = Image.fromarray(mask * 255, mode='L')
             self.draw.bitmap((0, 0), mask, fill=(255, 0, 0, 128))
 
@@ -169,7 +167,7 @@ def thresholding_mask(masks, threshold=0.25):
 
 
 def plot_images(images, targets, paths=None, fname='images.jpg', names=None, masks=None, max_size=1920, max_subplots=16,
-                is_pred=False, mask_threshold=0.25):
+                is_pred=False, mask_threshold=0.5):
     '''Plot image grid with labels
     if plotting ground truth:
         - targets: (bz, [batch_id, class_id, x, y, w, h])
@@ -186,7 +184,7 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, mas
     if masks is not None:
         masks4plot = masks.cpu().numpy()
         if is_pred:
-            masks4plot = thresholding_mask(masks.cpu().numpy(), mask_threshold)
+            masks4plot = thresholding_mask(masks.sigmoid().cpu().numpy(), mask_threshold)
 
 
     bs, _, h, w = images.shape  # batch size, _, height, width
@@ -251,8 +249,10 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, mas
                     artifact_enlarge_space = 5
                     box = [b - artifact_enlarge_space if i <= 1 else b + artifact_enlarge_space for i, b in enumerate(box)]
                     annotator.box_label(box, label, color=color)
-                    if masks is not None:
-                        annotator.crop_mask(mosaic_mask, box, no_crop=True, is_pred=is_pred)
+        if masks is not None:
+            # if is_pred:
+            #     breakpoint()
+            annotator.crop_mask(mosaic_mask, box, no_crop=True, is_pred=is_pred)
     annotator.im.save(fname)  # save
 
 

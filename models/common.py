@@ -518,9 +518,13 @@ class Classify(nn.Module):
 
 
 if __name__ == "__main__":
+    from torch.utils.tensorboard import SummaryWriter
+
     x = torch.zeros((8, 128, 80, 80))
     shortcut_list = [torch.zeros(8, 64, 160, 160), torch.zeros(8, 32, 320, 320), torch.zeros(8, 3, 640, 640)]
     protonet = ProtoNet(c1=x.size(1))
-    print(protonet)
     y = protonet(x, shortcut_list)
     print(y.size())  # (8, 1, 640, 640)
+
+    with SummaryWriter('../runs/graph') as w:
+        w.add_graph(protonet, (x, shortcut_list,))

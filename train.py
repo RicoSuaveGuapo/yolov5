@@ -469,7 +469,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
 def parse_opt(known=False):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', type=str, default='yolov5s.pt', help='initial weights path')
+    parser.add_argument('--weights', type=str, default='runs/train/exp108/weights/best.pt', help='initial weights path')
     parser.add_argument('--cfg', type=str, default='yolov5s_seg.yaml', help='model.yaml path')
     parser.add_argument('--data', type=str, default=ROOT / 'data/green_data.yaml', help='dataset.yaml path')
     parser.add_argument('--hyp', type=str, default=ROOT / 'data/hyps/hyp.scratch.yaml', help='hyperparameters path')
@@ -502,8 +502,8 @@ def parse_opt(known=False):
     parser.add_argument('--save-period', type=int, default=-1, help='Save checkpoint every x epochs (disabled if < 1)')
     parser.add_argument('--local_rank', type=int, default=-1, help='DDP parameter, do not modify')
     parser.add_argument('--enable_seg', action='store_true', help='open mask data output')
-    parser.add_argument('--mask_loss_type', type=str, default='dicebce',
-                        help='there are ["bce", "dice", "dicebce"] mask loss type')
+    parser.add_argument('--mask_loss_type', type=str, default='dice',
+                        help='there are ["bce", "dice", "dicebce", "focalloss"] mask loss type')
     parser.add_argument('--ann-coco-path', type=str, default='/nfs/Workspace/defect_data/defect_seg_dataset/jsons/ann_coco.json', \
                         help='path to save ground truth annotation of COCO format')
     parser.add_argument('--mode', default='val', help='Mode of creating coco_json')

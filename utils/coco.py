@@ -81,6 +81,9 @@ def convert_jsons_to_coco_format(opt):
             points = sum(points, [])  # [x1, y1, x2, y2, ...]
             segmentation.append(points)
 
+        # If wish to use the artificial square for mAP sanity check, uncomment below
+        # segmentation.append([0, 0, 0, 400, 400, 400, 400, 0])  # add an artificial rectangle for test
+
         img_dict = {
             'id': i,
             'width': ann_json['imageWidth'],

@@ -114,7 +114,10 @@ class Model(nn.Module):
         if isinstance(m, Detect):
             s = 256  # 2x min stride
             m.inplace = self.inplace
-            m.stride = torch.tensor([s / x.shape[-2] for x in self.forward(torch.zeros(1, ch, s, s))[0]])  # forward
+            if self.enable_seg:
+                m.stride = torch.tensor([s / x.shape[-2] for x in self.forward(torch.zeros(1, ch, s, s))[0]])  # forward
+            else:
+                m.stride = torch.tensor([s / x.shape[-2] for x in self.forward(torch.zeros(1, ch, s, s))])  # forward
             # modify above since if enable_seg is True, then there will be seg output
             m.anchors /= m.stride.view(-1, 1, 1)
             check_anchor_order(m)
@@ -253,7 +256,6 @@ class Model(nn.Module):
 
     def autoshape(self):  # add AutoShape module
         LOGGER.info('Adding AutoShape... ')
-        breakpoint()
         m = AutoShape(self, self.enable_seg)  # wrap model
         copy_attr(m, self, include=('yaml', 'nc', 'hyp', 'names', 'stride'), exclude=())  # copy attributes
         return m
