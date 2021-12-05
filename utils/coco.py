@@ -243,7 +243,7 @@ def generate_fake_predictions(coco_gt):
 if __name__ == '__main__':
     # run this to generate a coco file of ground truth
     # for example,
-    # python Defect_segmentation/yolov5/utils/coco.py --ann_dir './defect_data/green_crop/annotations'
+    # python Defect_segmentation/yolov5/utils/coco.py --ann_dir './defect_data/green_crop/annotations --show_img'
     parser = argparse.ArgumentParser()
     parser.add_argument('--ann_dir', type=str, help='annotation directory')
     parser.add_argument('--show_img', action='store_true')

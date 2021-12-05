@@ -29,7 +29,7 @@ from models.experimental import attempt_load
 from utils.datasets import create_dataloader
 from utils.general import coco80_to_coco91_class, check_dataset, check_img_size, check_requirements, \
     check_suffix, check_yaml, box_iou, non_max_suppression, scale_coords, xyxy2xywh, xywh2xyxy, set_logging, \
-    increment_path, colorstr, print_args, create_insts_mask
+    increment_path, colorstr, print_args, create_insts_mask, crop_dt_bimasks
 from utils.metrics import ap_per_class, ConfusionMatrix, calculate_mask_miou
 from utils.plots import output_to_target, plot_images, plot_val_study
 from utils.torch_utils import select_device, time_sync
@@ -110,7 +110,7 @@ def run(data,
         callbacks=Callbacks(),
         compute_loss=None,
         enable_seg=False,
-        mask_conf_threshold=0.4,
+        mask_conf_threshold=0.5,
         opt=None  # parser from train.py
         ):
     # Initialize/load model and set device
@@ -191,7 +191,8 @@ def run(data,
         # Run model
         if enable_seg:
             (out, train_out), proto_out = model(img, augment=augment)  # ((inference and training outputs), seg output)
-            dt_bimasks = np.where(proto_out.sigmoid().cpu().numpy() > mask_conf_threshold, 1, 0)
+            dt_bimasks = np.where(proto_out.sigmoid().cpu().numpy() > mask_conf_threshold, 1, 0)  # thresholding
+            dt_bimasks = crop_dt_bimasks(dt_bimasks, out)  # cropping dt_bimasks
             total_dt_bimasks.append(dt_bimasks)
         else:
             out, train_out = model(img, augment=augment)  # inference and training outputs
@@ -266,8 +267,9 @@ def run(data,
             f = save_dir / f'val_batch{batch_i}_labels.jpg'  # labels
             Thread(target=plot_images, args=(img, targets, paths, f, names, masks), daemon=True).start()
             f = save_dir / f'val_batch{batch_i}_pred.jpg'  # predictions
-            Thread(target=plot_images, args=(img, output_to_target(out), paths, f, names, proto_out, 1920, 16, True), daemon=True).start()
-            # plot_images(img, output_to_target(out), paths, f, names, proto_out, 1920, 16, True)
+            Thread(target=plot_images, args=(img, output_to_target(out),
+                                             paths, f, names, proto_out, 1920, 16, True, mask_conf_threshold), daemon=True).start()
+            # plot_images(img, output_to_target(out), paths, f, names, proto_out, 1920, 16, True, mask_conf_threshold)
             # breakpoint()
 
     # Compute statistics

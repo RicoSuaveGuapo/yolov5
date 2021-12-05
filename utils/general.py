@@ -499,6 +499,26 @@ def coco80_to_coco91_class():  # converts 80-index (val2014) to 91-index (paper)
          64, 65, 67, 70, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 84, 85, 86, 87, 88, 89, 90]
     return x
 
+def crop_dt_bimasks(dt_bimasks: np.ndarray, out: list):
+    if isinstance(out, torch.Tensor):
+        targets = []
+        for i, o in enumerate(out):
+            for *box, conf, cls in o.cpu().numpy():
+                targets.append([i, cls, *list(*xyxy2xywh(np.array(box)[None])), conf])
+        targets = np.array(targets)
+    
+    output_mask = np.zeros(dt_bimasks.shape)
+    for i in range(dt_bimasks.shape[0] + 1):
+        if len(targets) > 0:
+            ti = targets[targets[:, 0] == i]  # image targets
+            boxes = xywh2xyxy(ti[:, 2:6]).T
+        if boxes.shape[1]:
+            for box in boxes.T.tolist():
+                # crop the mask by bbox
+                x1, y1, x2, y2 = map(int, box)
+                output_mask[i, :, y1:y2, x1:x2] = dt_bimasks[i, :, y1:y2, x1:x2]
+                # cv2.imwrite('test.jpg', output_mask[i, 0, y1:y2, x1:x2] * 255)
+    return output_mask
 
 def create_insts_mask(bboxes, mask, mask_conf_threshold):
     mask = mask.squeeze().cpu().numpy()

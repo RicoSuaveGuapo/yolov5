@@ -109,6 +109,8 @@ class Annotator:
         if not no_crop:
             # crop the mask by bbox
             x1, y1, x2, y2 = map(int, box)
+            # if is_pred:
+            #     breakpoint()
             output_mask = np.zeros_like(mask)
             output_mask[y1:y2, x1:x2] = mask[y1:y2, x1:x2] * 255
             output_mask = Image.fromarray(output_mask, mode='L')
@@ -249,10 +251,10 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, mas
                     artifact_enlarge_space = 5
                     box = [b - artifact_enlarge_space if i <= 1 else b + artifact_enlarge_space for i, b in enumerate(box)]
                     annotator.box_label(box, label, color=color)
-        if masks is not None:
-            # if is_pred:
-            #     breakpoint()
-            annotator.crop_mask(mosaic_mask, box, no_crop=True, is_pred=is_pred)
+                if masks is not None:
+                    # if is_pred:
+                    #     breakpoint()
+                    annotator.crop_mask(mosaic_mask, box, no_crop=False, is_pred=is_pred)
     annotator.im.save(fname)  # save
 
 

@@ -49,6 +49,10 @@
         python val.py --data [DATA] --weights [WEIGHTS] --ann-coco-path [ANN_COCO_PATH] --save-pred-coco [SAVE_PRED_COCO]
         ```
 
+## Important Weights
+* exp108: detection only trained model weight
+* exp112: seg module with diceloss
+
 ## TODO List
 
 ### Action items
