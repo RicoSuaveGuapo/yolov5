@@ -47,6 +47,6 @@ head:
    [[17, 20, 23], 1, Detect, [nc, anchors]],  # Detect(P3, P4, P5)
   ]
 mask:
-  [[[17, 2, 0], 1, 'ProtoNet', [None]]]  # choose module 17 as input feature map
+  [[[17, 2, 0], 1, 'Decoder', [None]]]  # choose module 17 as input feature map
                                          # and module 0, 2 as shortcut connection
                                          # the order of "from" matter!

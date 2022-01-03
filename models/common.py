@@ -142,7 +142,7 @@ class C3(nn.Module):
         return self.cv3(torch.cat((self.m(self.cv1(x)), self.cv2(x)), dim=1))
 
 
-class ProtoNet(nn.Module):
+class Decoder(nn.Module):
     def __init__(self, c1,
                  c3_in_channel=[128, 64, 32],
                  c3_out_channel=[64, 32, 16],
@@ -155,7 +155,7 @@ class ProtoNet(nn.Module):
         '''
         scale_factor = int(math.log2(size_gain))
         assert scale_factor == len(c3_out_channel), 'size gain is not consistent to up_out_channel list length'
-        assert c1 == c3_in_channel[0], 'For now, ProtoNet only support yolov5s model configuration'
+        assert c1 == c3_in_channel[0], 'For now, Decoder only support yolov5s model configuration'
         up_in_channel, up_out_channel = c3_in_channel, c3_out_channel
         self.upsampler = nn.ModuleList([nn.ConvTranspose2d(up_in_channel[i], up_out_channel[i], 3, 
                                                            stride=2, padding=1, output_padding=1)
@@ -522,9 +522,9 @@ if __name__ == "__main__":
 
     x = torch.zeros((8, 128, 80, 80))
     shortcut_list = [torch.zeros(8, 64, 160, 160), torch.zeros(8, 32, 320, 320), torch.zeros(8, 3, 640, 640)]
-    protonet = ProtoNet(c1=x.size(1))
-    y = protonet(x, shortcut_list)
+    Decoder = Decoder(c1=x.size(1))
+    y = Decoder(x, shortcut_list)
     print(y.size())  # (8, 1, 640, 640)
 
     with SummaryWriter('../runs/graph') as w:
-        w.add_graph(protonet, (x, shortcut_list,))
+        w.add_graph(Decoder, (x, shortcut_list,))

@@ -150,9 +150,9 @@ class Model(nn.Module):
 
     def _forward_once(self, x, profile=False, visualize=False):
         y, dt = [], []  # outputs
-        ori_x = x.clone()  # will be used in shortcut connection to Protonet
+        ori_x = x.clone()  # will be used in shortcut connection to Decoder
         for m in self.model:
-            if isinstance(m, ProtoNet):
+            if isinstance(m, Decoder):
                 # if isinstance(m.f, int):
                 #     proto_in = y[m.f]
                 #     proto_out = m(proto_in)
@@ -311,7 +311,7 @@ def parse_model(d, ch, enable_seg=False):  # model_dict, input_channels(3)
             if m in [BottleneckCSP, C3, C3TR, C3Ghost]:
                 args.insert(2, n)  # number of repeats
                 n = 1
-        elif m is ProtoNet:
+        elif m is Decoder:
             # if isinstance(f, int):
             #     args = [ch[f]]
             # elif isinstance(f, list):
