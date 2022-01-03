@@ -191,9 +191,6 @@ def run(data,
         # Run model
         if enable_seg:
             (out, train_out), proto_out = model(img, augment=augment)  # ((inference and training outputs), seg output)
-            dt_bimasks = np.where(proto_out.sigmoid().cpu().numpy() > mask_conf_threshold, 1, 0)  # thresholding
-            dt_bimasks = crop_dt_bimasks(dt_bimasks, out)  # cropping dt_bimasks
-            total_dt_bimasks.append(dt_bimasks)
         else:
             out, train_out = model(img, augment=augment)  # inference and training outputs
         dt[1] += time_sync() - t2
@@ -211,6 +208,11 @@ def run(data,
         t3 = time_sync()
         out = non_max_suppression(out, conf_thres, iou_thres, labels=lb, multi_label=True, agnostic=single_cls)
         dt[2] += time_sync() - t3
+
+        if enable_seg:
+            dt_bimasks = np.where(proto_out.sigmoid().cpu().numpy() > mask_conf_threshold, 1, 0)  # thresholding
+            dt_bimasks = crop_dt_bimasks(dt_bimasks, out)  # cropping dt_bimasks
+            total_dt_bimasks.append(dt_bimasks)
 
         # Statistics per image
         # coco_bboxes_conf_list = []

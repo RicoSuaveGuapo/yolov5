@@ -506,12 +506,20 @@ def crop_dt_bimasks(dt_bimasks: np.ndarray, out: list):
             for *box, conf, cls in o.cpu().numpy():
                 targets.append([i, cls, *list(*xyxy2xywh(np.array(box)[None])), conf])
         targets = np.array(targets)
+    elif isinstance(out, list):
+        targets = out
     
     output_mask = np.zeros(dt_bimasks.shape)
-    for i in range(dt_bimasks.shape[0] + 1):
+    for i in range(dt_bimasks.shape[0]):
         if len(targets) > 0:
-            ti = targets[targets[:, 0] == i]  # image targets
-            boxes = xywh2xyxy(ti[:, 2:6]).T
+            if isinstance(out, torch.Tensor):
+                ti = targets[targets[:, 0] == i]  # image targets
+                boxes = xywh2xyxy(ti[:, 2:6]).T
+            elif isinstance(out, list):
+                try:
+                    boxes = xywh2xyxy(out[i][:, 0:4]).T
+                except:
+                    breakpoint()
         if boxes.shape[1]:
             for box in boxes.T.tolist():
                 # crop the mask by bbox
@@ -519,6 +527,7 @@ def crop_dt_bimasks(dt_bimasks: np.ndarray, out: list):
                 output_mask[i, :, y1:y2, x1:x2] = dt_bimasks[i, :, y1:y2, x1:x2]
                 # cv2.imwrite('test.jpg', output_mask[i, 0, y1:y2, x1:x2] * 255)
     return output_mask
+
 
 def create_insts_mask(bboxes, mask, mask_conf_threshold):
     mask = mask.squeeze().cpu().numpy()

@@ -1,3 +1,4 @@
+import cv2
 import json
 import torch
 import argparse
@@ -41,15 +42,18 @@ def compute_mask_area(segm, h, w):
 
 def convert_jsons_to_coco_format(opt):
     ann_dir = Path(opt.ann_dir)
+    
     if opt.mode == 'coco':
+        # parent_dir = ann_dir.parents[0]
+        # img_dir = parent_dir / 'image'
+        img_dir = Path(str(ann_dir).replace('jsons', 'images'))
         parent_dir = ann_dir.parents[0]
-        img_dir = parent_dir / 'image'
     elif opt.mode == 'val':
         img_dir = Path(str(ann_dir).replace('jsons', 'images'))
         parent_dir = ann_dir.parents[0]
 
-    assert img_dir.exists()
-    assert img_dir.is_dir()
+    assert img_dir.exists(), img_dir
+    assert img_dir.is_dir(), img_dir
 
     coco_json = {
         'images': [],
@@ -105,7 +109,7 @@ def convert_jsons_to_coco_format(opt):
             coco_json['annotations'].append(ann)
 
     coco_json = json.dumps(coco_json)
-    coco_file_path = parent_dir / 'ann_coco.json'
+    coco_file_path = parent_dir / f'{ann_dir.name}_ann_coco.json'
     with coco_file_path.open('w') as f:
         f.write(coco_json)
     
@@ -116,7 +120,7 @@ def convert_jsons_to_coco_format(opt):
 def check_coco(opt):
     ann_dir = Path(opt.ann_dir)
     parent_dir = ann_dir.parents[0]
-    coco_file_path = parent_dir / 'ann_coco.json'
+    coco_file_path = parent_dir / f'{ann_dir.name}_ann_coco.json'
 
     assert coco_file_path.exists()
 
@@ -183,8 +187,13 @@ def pred2coco(coco_gt, paths, bimasks, scores, result_file_path):
     json_results = []
     for path, bimask, score in tqdm(zip(paths, bimasks, scores), desc='generating result json'):
         img_id = get_img_id(coco_gt, path)
+        img_dict = coco_gt.loadImgs(img_id)[0]
+        w, h = img_dict['width'], img_dict['height']
+
+        bimask = bimask.astype(np.uint8)
+        bimask = cv2.resize(bimask, (w, h))
         rle = bimask2rle(bimask)
-        rle['counts'] = rle['counts'].decode()  # in order to make it is JSON serializable
+        rle['counts'] = rle['counts'].decode()  # in order to make it JSON serializable
 
         data = {
             'image_id': img_id,
@@ -243,7 +252,7 @@ def generate_fake_predictions(coco_gt):
 if __name__ == '__main__':
     # run this to generate a coco file of ground truth
     # for example,
-    # python Defect_segmentation/yolov5/utils/coco.py --ann_dir './defect_data/green_crop/annotations --show_img'
+    # python Defect_segmentation/yolov5/utils/coco.py --ann_dir './defect_data/green_crop/annotations' --show_img
     parser = argparse.ArgumentParser()
     parser.add_argument('--ann_dir', type=str, help='annotation directory')
     parser.add_argument('--show_img', action='store_true')
@@ -259,8 +268,8 @@ if __name__ == '__main__':
 #     # run this to generate fake prediction to check the result is good
 #     # for example,
 #     # python Defect_segmentation/yolov5/utils/coco.py
-#     coco_path = '/nfs/Workspace/defect_data/green_crop/ann_coco.json'
-#     result_file_path = '/nfs/Workspace/defect_data/green_crop/prediction_coco.json'
+#     coco_path = '/nfs/Workspace/defect_data/defect_seg_dataset/jsons/val_ann_coco.json'
+#     result_file_path = '/nfs/Workspace/defect_data/defect_seg_dataset/jsons/prediction.json'
 
 #     coco_gt = COCO(coco_path)
 #     paths, bimasks, scores = generate_fake_predictions(coco_gt)

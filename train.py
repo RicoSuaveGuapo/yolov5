@@ -469,17 +469,18 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
 def parse_opt(known=False):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', type=str, default='runs/train/exp108/weights/best.pt', help='initial weights path')
+    parser.add_argument('--weights', type=str, default='runs/train/exp182/weights/last.pt', help='initial weights path')
     parser.add_argument('--cfg', type=str, default='yolov5s_seg.yaml', help='model.yaml path')
     parser.add_argument('--data', type=str, default=ROOT / 'data/green_data.yaml', help='dataset.yaml path')
     parser.add_argument('--hyp', type=str, default=ROOT / 'data/hyps/hyp.scratch.yaml', help='hyperparameters path')
     parser.add_argument('--epochs', type=int, default=300)
     parser.add_argument('--batch-size', type=int, default=16, help='total batch size for all GPUs')
-    parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=640, help='train, val image size (pixels)')
+    parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=608, help='train, val image size (pixels)')
     parser.add_argument('--rect', action='store_true', help='rectangular training')
     parser.add_argument('--resume', nargs='?', const=True, default=False, help='resume most recent training')
     parser.add_argument('--nosave', action='store_true', help='only save final checkpoint')
     parser.add_argument('--noval', action='store_true', help='only validate final epoch')
+    parser.add_argument('--val_every_epoch', default=1, type=int, help='do val every x epoch')
     parser.add_argument('--noautoanchor', action='store_true', help='disable autoanchor check')
     parser.add_argument('--evolve', type=int, nargs='?', const=300, help='evolve hyperparameters for x generations')
     parser.add_argument('--bucket', type=str, default='', help='gsutil bucket')
@@ -502,7 +503,7 @@ def parse_opt(known=False):
     parser.add_argument('--save-period', type=int, default=-1, help='Save checkpoint every x epochs (disabled if < 1)')
     parser.add_argument('--local_rank', type=int, default=-1, help='DDP parameter, do not modify')
     parser.add_argument('--enable_seg', action='store_true', help='open mask data output')
-    parser.add_argument('--mask_loss_type', type=str, default='dice',
+    parser.add_argument('--mask_loss_type', type=str, default='focalloss',
                         help='there are ["bce", "dice", "dicebce", "focalloss"] mask loss type')
     parser.add_argument('--ann-coco-path', type=str, default='/nfs/Workspace/defect_data/defect_seg_dataset/jsons/ann_coco.json', \
                         help='path to save ground truth annotation of COCO format')

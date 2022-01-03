@@ -17,13 +17,13 @@
     ```
 
 * Training
-    * for mcut:
+    Train detection only
         ```
-        python train.py --enable_seg --noautoanchor
+        python train.py --noautoanchor
         ```
-    * for jarvis:
+    If train seg module only
         ```
-        python train.py --enable_seg --noautoanchor
+        python train.py --enable_seg --noautoanchor --freeze 24
         ```
 
 * Validation
@@ -52,6 +52,7 @@
 ## Important Weights
 * exp108: detection only trained model weight
 * exp112: seg module with diceloss
+* exp163: seg module sota
 
 ## TODO List
 
