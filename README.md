@@ -18,13 +18,14 @@
 
 * Training
     Train detection only
-        ```
-        python train.py --noautoanchor
-        ```
+    ```
+    python train.py --noautoanchor
+    ```
+    
     If train seg module only
-        ```
-        python train.py --enable_seg --noautoanchor --freeze 24
-        ```
+    ```
+    python train.py --enable_seg --noautoanchor --freeze 24
+    ```
 
 * Validation
     * In training:
@@ -46,7 +47,7 @@
 
         * for mcut:
         ```
-        python val.py --data [DATA] --weights [WEIGHTS] --ann-coco-path [ANN_COCO_PATH] --save-pred-coco [SAVE_PRED_COCO]
+        python val.py --data [DATA] --weights [WEIGHTS] --enable_seg --ann-coco-path [ANN_COCO_PATH] --save-pred-coco [SAVE_PRED_COCO]
         ```
 
 ## Important Weights

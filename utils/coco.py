@@ -178,9 +178,12 @@ def pred2coco(coco_gt, paths, bimasks, scores, result_file_path):
     # paths: [img_file_0, img_file_1, ...]
     # bimasks: [mask_0, mask_1, ...]
     # scores: [score_0, score_1, ...]
+    if result_file_path is None:
+        raise ValueError('The argument `result_file_path` can not be `None`')
 
     assert len(paths) == len(bimasks) == len(scores), \
         f'#paths = {len(paths)}, #bimasks = {len(bimasks)}, #scores = {len(scores)}'
+        
     if isinstance(result_file_path, Path):
         result_file_path = str(result_file_path)
 

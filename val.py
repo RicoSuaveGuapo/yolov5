@@ -26,13 +26,14 @@ if str(ROOT) not in sys.path:
 ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
 from models.experimental import attempt_load
+from models.yolo import Model
 from utils.datasets import create_dataloader
 from utils.general import coco80_to_coco91_class, check_dataset, check_img_size, check_requirements, \
     check_suffix, check_yaml, box_iou, non_max_suppression, scale_coords, xyxy2xywh, xywh2xyxy, set_logging, \
     increment_path, colorstr, print_args, create_insts_mask, crop_dt_bimasks
 from utils.metrics import ap_per_class, ConfusionMatrix, calculate_mask_miou
 from utils.plots import output_to_target, plot_images, plot_val_study
-from utils.torch_utils import select_device, time_sync
+from utils.torch_utils import select_device, time_sync, intersect_dicts
 from utils.callbacks import Callbacks
 from utils.coco import pred2coco, coco_eval
 
@@ -111,8 +112,15 @@ def run(data,
         compute_loss=None,
         enable_seg=False,
         mask_conf_threshold=0.5,
+        ann_coco_path=None,
         opt=None  # parser from train.py
         ):
+
+    if opt.save_pred_coco is None:  # called directly
+        opt.save_dir = increment_path(Path(opt.project) / opt.name, exist_ok=opt.exist_ok)
+        opt.save_dir = Path(str(opt.save_dir))
+        opt.save_pred_coco = opt.save_dir / f'{opt.task}_pred_coco.json'
+
     # Initialize/load model and set device
     training = model is not None
     if training:  # called by train.py
@@ -126,8 +134,14 @@ def run(data,
         (save_dir / 'labels' if save_txt else save_dir).mkdir(parents=True, exist_ok=True)  # make dir
 
         # Load model
-        check_suffix(weights, '.pt')
-        model = attempt_load(weights, map_location=device)  # load FP32 model
+        ckpt = torch.load(weights, map_location=device)  # load checkpoint
+        model = Model(opt.cfg, ch=3, nc=1, enable_seg=enable_seg).to(device)  # create
+        csd = ckpt['model'].float().state_dict()  # checkpoint state_dict as FP32
+        csd = intersect_dicts(csd, model.state_dict())  # intersect
+        model.load_state_dict(csd, strict=False)  # load
+
+        # check_suffix(weights, '.pt')
+        # model = attempt_load(weights, map_location=device)  # load FP32 model
         gs = max(int(model.stride.max()), 32)  # grid size (max stride)
         imgsz = check_img_size(imgsz, s=gs)  # check image size
 
@@ -155,8 +169,9 @@ def run(data,
             model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(model.parameters())))  # run once
         pad = 0.0 if task == 'speed' else 0.5
         task = task if task in ('train', 'val', 'test') else 'val'  # path to train/val/test images
-        dataloader = create_dataloader(data[task], imgsz, batch_size, gs, single_cls, pad=pad, rect=True,
-                                       prefix=colorstr(f'{task}: '))[0]
+        dataloader = create_dataloader(data[task], imgsz, batch_size, gs, single_cls, pad=pad, rect=False,
+                                       prefix=colorstr(f'{task}: '), enable_seg=enable_seg,
+                                       json_dir=data[f'json_{task}'])[0]
 
     seen = 0
     confusion_matrix = ConfusionMatrix(nc=nc)
@@ -305,7 +320,10 @@ def run(data,
         # for coco api
         print('=' * 10 + ' mask mAP ' + '=' * 10)
         total_scores = np.array([1.0] * len(total_dt_bimasks))  # (N)
-        coco_gt = COCO(opt.ann_coco_path)
+        if ann_coco_path is None:
+            breakpoint()
+            raise ValueError
+        coco_gt = COCO(ann_coco_path)
         coco_dt = pred2coco(coco_gt, total_paths, total_dt_bimasks, total_scores, opt.save_pred_coco)
         coco_eval(coco_gt, coco_dt)
         print('=' * 30)
@@ -358,10 +376,11 @@ def run(data,
 
 def parse_opt():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--data', type=str, default=ROOT / 'data/coco128.yaml', help='dataset.yaml path')
-    parser.add_argument('--weights', nargs='+', type=str, default=ROOT / 'yolov5s.pt', help='model.pt path(s)')
+    parser.add_argument('--data', type=str, default=ROOT / 'data/green_data.yaml', help='dataset.yaml path')
+    parser.add_argument('--cfg', type=str, default=ROOT / 'models/yolov5s_seg.yaml', help='model.yaml path')
+    parser.add_argument('--weights', nargs='+', type=str, default=ROOT / 'runs/train/exp163/weights/last.pt', help='model.pt path(s)')
     parser.add_argument('--batch-size', type=int, default=32, help='batch size')
-    parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=640, help='inference size (pixels)')
+    parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=608, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.001, help='confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.6, help='NMS IoU threshold')
     parser.add_argument('--task', default='val', help='train, val, test, speed or study')
@@ -377,7 +396,9 @@ def parse_opt():
     parser.add_argument('--name', default='exp', help='save to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--half', action='store_true', help='use FP16 half-precision inference')
-    parser.add_argument('--ann-coco-path', type=str, default='/nfs/Workflow/defect_data/green_crop/ann_coco.json',
+    parser.add_argument('--enable_seg', action='store_true')
+    parser.add_argument('--mask-conf-threshold', type=float, default=0.5)
+    parser.add_argument('--ann-coco-path', type=str, default='/nfs/Workspace/defect_data/defect_seg_dataset/jsons/val_ann_coco.json',
                         help='path of ground truth annotation of COCO format')
     parser.add_argument('--save-pred-coco', type=str, help='save prediction of COCO format')
     parser.add_argument('--mode', default='val', help='Mode of creating coco_json')
@@ -395,7 +416,21 @@ def main(opt):
     check_requirements(exclude=('tensorboard', 'thop'))
 
     if opt.task in ('train', 'val', 'test'):  # run normally
-        run(**vars(opt))
+        run(
+            opt.data,
+            weights=opt.weights,
+            batch_size=opt.batch_size,
+            imgsz=opt.imgsz,
+            conf_thres=opt.conf_thres,
+            iou_thres=opt.iou_thres,
+            task='val',
+            device='',
+            project=ROOT / 'runs/val',
+            enable_seg=opt.enable_seg,
+            mask_conf_threshold=opt.mask_conf_threshold,
+            ann_coco_path=opt.ann_coco_path,
+            opt=opt
+        )
 
     elif opt.task == 'speed':  # speed benchmarks
         # python val.py --task speed --data coco.yaml --batch 1 --weights yolov5n.pt yolov5s.pt...
