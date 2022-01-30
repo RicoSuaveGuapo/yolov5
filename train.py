@@ -393,6 +393,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                                            callbacks=callbacks,
                                            compute_loss=compute_loss,
                                            enable_seg=opt.enable_seg,
+                                           mask_conf_threshold=opt.mask_conf_threshold,
                                            ann_coco_path=opt.ann_coco_path,
                                            opt=opt)
 
@@ -459,6 +460,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                                             callbacks=callbacks,
                                             compute_loss=compute_loss,  # val best model with plots
                                             enable_seg=opt.enable_seg,
+                                            mask_conf_threshold=opt.mask_conf_threshold,
                                             ann_coco_path=opt.ann_coco_path,
                                             opt=opt)
 
@@ -471,11 +473,12 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
 def parse_opt(known=False):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', type=str, default='runs/train/exp163/weights/last.pt', help='initial weights path')
+    parser.add_argument('--weights', type=str, default='runs/train/exp216/weights/best.pt', help='initial weights path')
+    #parser.add_argument('--weights', type=str, default='yolov5s.pt', help='initial weights path')
     parser.add_argument('--cfg', type=str, default='yolov5s_seg.yaml', help='model.yaml path')
     parser.add_argument('--data', type=str, default=ROOT / 'data/green_data.yaml', help='dataset.yaml path')
     parser.add_argument('--hyp', type=str, default=ROOT / 'data/hyps/hyp.scratch.yaml', help='hyperparameters path')
-    parser.add_argument('--epochs', type=int, default=300)
+    parser.add_argument('--epochs', type=int, default=30)
     parser.add_argument('--batch-size', type=int, default=16, help='total batch size for all GPUs')
     parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=608, help='train, val image size (pixels)')
     parser.add_argument('--rect', action='store_true', help='rectangular training')
@@ -499,12 +502,13 @@ def parse_opt(known=False):
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--quad', action='store_true', help='quad dataloader')
     parser.add_argument('--linear-lr', action='store_true', help='linear LR')
-    parser.add_argument('--label-smoothing', type=float, default=0.0, help='Label smoothing epsilon')
+    parser.add_argument('--label-smoothing', type=float, default=0.9, help='Label smoothing epsilon')
     parser.add_argument('--patience', type=int, default=100, help='EarlyStopping patience (epochs without improvement)')
     parser.add_argument('--freeze', type=int, default=0, help='Number of layers to freeze. backbone=10, all=24')
     parser.add_argument('--save-period', type=int, default=-1, help='Save checkpoint every x epochs (disabled if < 1)')
     parser.add_argument('--local_rank', type=int, default=-1, help='DDP parameter, do not modify')
     parser.add_argument('--enable_seg', action='store_true', help='open mask data output')
+    parser.add_argument('--mask-conf-threshold', type=float, default=0.5)
     parser.add_argument('--mask_loss_type', type=str, default='focalloss',
                         help='there are ["bce", "dice", "dicebce", "focalloss"] mask loss type')
     parser.add_argument('--ann-coco-path', type=str, default='/nfs/Workspace/defect_data/defect_seg_dataset/jsons/val_ann_coco.json', \
