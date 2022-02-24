@@ -1,5 +1,6 @@
 import cv2
 import json
+import sys
 import torch
 import argparse
 import numpy as np
@@ -217,7 +218,7 @@ def pred2coco(coco_gt, paths, bimasks, scores, result_file_path):
     return coco_dt
 
 
-def coco_eval(coco_gt, coco_dt):
+def coco_eval(coco_gt, coco_dt, save_dir):
     img_ids = coco_gt.getImgIds()
     iou_type = 'segm'
     coco_eval = COCOeval(coco_gt, coco_dt, iou_type)
@@ -225,6 +226,12 @@ def coco_eval(coco_gt, coco_dt):
 
     coco_eval.evaluate()
     coco_eval.accumulate()
+    
+    original_stdout = sys.stdout
+    with open(save_dir / 'seg_metric.txt', 'a') as f:
+        sys.stdout = f
+        coco_eval.summarize()
+        sys.stdout = original_stdout
     coco_eval.summarize()
 
 

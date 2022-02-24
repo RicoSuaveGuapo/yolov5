@@ -4,6 +4,13 @@
 * jarvis: /usr/AI/Defect_segmentation
 * mcut: /nfs/Workspace/Defect_segmentation
 
+
+## Multi-steps training
+1. train det
+2. use `best.pt` from step 1, train with dice loss (>300 epoch)
+3. use `last.pt` from step 2, train with dicebce loss
+4. use `best.pt` from step 3, train with focal loss
+
 ### Code Snippet
 * Preprocess data:
     jarvis

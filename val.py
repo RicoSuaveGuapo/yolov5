@@ -130,7 +130,7 @@ def run(data,
         device = select_device(device, batch_size=batch_size)
 
         # Directories
-        save_dir = increment_path(Path(project) / name, exist_ok=exist_ok)  # increment run
+        save_dir = increment_path(Path(opt.project) / opt.name, exist_ok=exist_ok)  # increment run
         (save_dir / 'labels' if save_txt else save_dir).mkdir(parents=True, exist_ok=True)  # make dir
 
         # Load model
@@ -226,8 +226,13 @@ def run(data,
 
         if enable_seg:
             dt_bimasks = np.where(proto_out.sigmoid().cpu().numpy() > mask_conf_threshold, 1, 0)  # thresholding
-            dt_bimasks = crop_dt_bimasks(dt_bimasks, out)  # cropping dt_bimasks
             total_dt_bimasks.append(dt_bimasks)
+
+            # import cv2
+            # cv2.imwrite('gt.png', masks.detach().cpu().numpy()[2][0] * 255)
+            # cv2.imwrite('dt.png', dt_bimasks[2][0] * 255)
+            # dt_bimasks = crop_dt_bimasks(dt_bimasks, out, bbox_conf4seg=0.1)  # cropping dt_bimasks
+            # cv2.imwrite('dt_crop.png', dt_bimasks[2][0] * 255)
 
         # Statistics per image
         # coco_bboxes_conf_list = []
@@ -283,9 +288,11 @@ def run(data,
                 proto_out = None
             f = save_dir / f'val_batch{batch_i}_labels.jpg'  # labels
             Thread(target=plot_images, args=(img, targets, paths, f, names, masks), daemon=True).start()
+            # plot_images(img, targets, paths, f, names, masks)
             f = save_dir / f'val_batch{batch_i}_pred.jpg'  # predictions
             Thread(target=plot_images, args=(img, output_to_target(out),
                                              paths, f, names, proto_out, 1920, 16, True, mask_conf_threshold), daemon=True).start()
+            # 
             # plot_images(img, output_to_target(out), paths, f, names, proto_out, 1920, 16, True, mask_conf_threshold)
             # breakpoint()
 
@@ -316,16 +323,17 @@ def run(data,
         miou = calculate_mask_miou(total_gt_bimasks, total_dt_bimasks)
         print('mIoU = {:.3f}'.format(miou))
         print('=' * 30)
+        with open(save_dir / 'seg_metric.txt', 'a') as f:
+            f.write(f'mIoU = {miou:.3f}\n')
         
         # for coco api
         print('=' * 10 + ' mask mAP ' + '=' * 10)
         total_scores = np.array([1.0] * len(total_dt_bimasks))  # (N)
         if ann_coco_path is None:
-            breakpoint()
-            raise ValueError
+            raise ValueError(f'ann_coco_path is not given')
         coco_gt = COCO(ann_coco_path)
         coco_dt = pred2coco(coco_gt, total_paths, total_dt_bimasks, total_scores, opt.save_pred_coco)
-        coco_eval(coco_gt, coco_dt)
+        coco_eval(coco_gt, coco_dt, save_dir)
         print('=' * 30)
 
     # Print speeds
@@ -371,14 +379,18 @@ def run(data,
     maps = np.zeros(nc) + map
     for i, c in enumerate(ap_class):
         maps[c] = ap[i]
-    return (mp, mr, map50, map, *(loss.cpu() / len(dataloader)).tolist()), maps, t
+    
+    if enable_seg:
+        return (mp, mr, map50, map, *(loss.cpu() / len(dataloader)).tolist()), (maps, miou), t
+    else:
+        return (mp, mr, map50, map, *(loss.cpu() / len(dataloader)).tolist()), maps, t
 
 
 def parse_opt():
     parser = argparse.ArgumentParser()
     parser.add_argument('--data', type=str, default=ROOT / 'data/green_data.yaml', help='dataset.yaml path')
     parser.add_argument('--cfg', type=str, default=ROOT / 'models/yolov5s_seg.yaml', help='model.yaml path')
-    parser.add_argument('--weights', nargs='+', type=str, default=ROOT / 'runs/seg/exp/weights/last.pt', help='model.pt path(s)')
+    parser.add_argument('--weights', nargs='+', type=str, default=ROOT / 'runs/new_seg/train/exp/weights/last.pt', help='model.pt path(s)')
     parser.add_argument('--batch-size', type=int, default=32, help='batch size')
     parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=608, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.001, help='confidence threshold')
@@ -392,7 +404,7 @@ def parse_opt():
     parser.add_argument('--save-hybrid', action='store_true', help='save label+prediction hybrid results to *.txt')
     parser.add_argument('--save-conf', action='store_true', help='save confidences in --save-txt labels')
     parser.add_argument('--save-json', action='store_true', help='save a COCO-JSON results file')
-    parser.add_argument('--project', default=ROOT / 'runs/val', help='save to project/name')
+    parser.add_argument('--project', default=ROOT / 'runs/multi_step/val', help='save to project/name')
     parser.add_argument('--name', default='exp', help='save to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--half', action='store_true', help='use FP16 half-precision inference')

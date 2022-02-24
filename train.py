@@ -170,7 +170,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     ema = ModelEMA(model) if RANK in [-1, 0] else None
 
     # Resume
-    start_epoch, best_fitness = 0, 0.0
+    start_epoch, best_fitness, best_miou = 0, 0.0, 0
     if pretrained:
         # Optimizer
         if ckpt['optimizer'] is not None:
@@ -272,7 +272,10 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     # nw = min(nw, (epochs - start_epoch) / 2 * nb)  # limit warmup to < 1/2 of training
     last_opt_step = -1
     maps = np.zeros(nc)  # mAP per class
-    results = (0, 0, 0, 0, 0, 0, 0)  # P, R, mAP@.5, mAP@.5-.95, val_loss(box, obj, cls)
+    if opt.enable_seg:
+        results = (0, 0, 0, 0, 0, 0, 0, 0)  # P, R, mAP@.5, mAP@.5-.95, val_loss(box, obj, cls, mask)
+    else:
+        results = (0, 0, 0, 0, 0, 0, 0)  # P, R, mAP@.5, mAP@.5-.95, val_loss(box, obj, cls)
     scheduler.last_epoch = start_epoch - 1  # do not move
     scaler = amp.GradScaler(enabled=cuda)
     stopper = EarlyStopping(patience=opt.patience)
@@ -395,12 +398,17 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                                            enable_seg=opt.enable_seg,
                                            mask_conf_threshold=opt.mask_conf_threshold,
                                            ann_coco_path=opt.ann_coco_path,
-                                           opt=opt)
+                                           opt=opt,
+                                           bbox_conf4seg=opt.bbox_conf4seg)
+                if opt.enable_seg:
+                    maps, miou = maps
 
             # Update best mAP
             fi = fitness(np.array(results).reshape(1, -1))  # weighted combination of [P, R, mAP@.5, mAP@.5-.95]
             if fi > best_fitness:
                 best_fitness = fi
+            if opt.enable_seg and miou > best_miou and not noval:
+                best_miou = miou
             log_vals = list(mloss) + list(results) + lr
             callbacks.run('on_fit_epoch_end', log_vals, epoch, best_fitness, fi)
 
@@ -416,7 +424,9 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
                 # Save last, best and delete
                 torch.save(ckpt, last)
-                if best_fitness == fi:
+                if best_fitness == fi and not opt.enable_seg:
+                    torch.save(ckpt, best)
+                elif best_miou == miou and opt.enable_seg and not noval:
                     torch.save(ckpt, best)
                 if (epoch > 0) and (opt.save_period > 0) and (epoch % opt.save_period == 0):
                     torch.save(ckpt, w / f'epoch{epoch}.pt')
@@ -462,7 +472,8 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                                             enable_seg=opt.enable_seg,
                                             mask_conf_threshold=opt.mask_conf_threshold,
                                             ann_coco_path=opt.ann_coco_path,
-                                            opt=opt)
+                                            opt=opt,
+                                            bbox_conf4seg=opt.bbox_conf4seg)
 
         callbacks.run('on_train_end', last, best, plots, epoch)
         LOGGER.info(f"Results saved to {colorstr('bold', save_dir)}")
@@ -473,12 +484,11 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
 def parse_opt(known=False):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', type=str, default='runs/train/exp216/weights/best.pt', help='initial weights path')
-    #parser.add_argument('--weights', type=str, default='yolov5s.pt', help='initial weights path')
+    parser.add_argument('--weights', type=str, default='runs/new_seg/train/exp/weights/last.pt', help='initial weights path')
     parser.add_argument('--cfg', type=str, default='yolov5s_seg.yaml', help='model.yaml path')
     parser.add_argument('--data', type=str, default=ROOT / 'data/green_data.yaml', help='dataset.yaml path')
     parser.add_argument('--hyp', type=str, default=ROOT / 'data/hyps/hyp.scratch.yaml', help='hyperparameters path')
-    parser.add_argument('--epochs', type=int, default=30)
+    parser.add_argument('--epochs', type=int, default=300)
     parser.add_argument('--batch-size', type=int, default=16, help='total batch size for all GPUs')
     parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=608, help='train, val image size (pixels)')
     parser.add_argument('--rect', action='store_true', help='rectangular training')
@@ -497,19 +507,19 @@ def parse_opt(known=False):
     parser.add_argument('--adam', action='store_true', help='use torch.optim.Adam() optimizer')
     parser.add_argument('--sync-bn', action='store_true', help='use SyncBatchNorm, only available in DDP mode')
     parser.add_argument('--workers', type=int, default=8, help='maximum number of dataloader workers')
-    parser.add_argument('--project', default=ROOT / 'runs/train', help='save to project/name')
+    parser.add_argument('--project', default=ROOT / 'runs/multi_step/train', help='save to project/name')
     parser.add_argument('--name', default='exp', help='save to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--quad', action='store_true', help='quad dataloader')
     parser.add_argument('--linear-lr', action='store_true', help='linear LR')
-    parser.add_argument('--label-smoothing', type=float, default=0.9, help='Label smoothing epsilon')
+    parser.add_argument('--label-smoothing', type=float, default=0.0, help='Label smoothing epsilon')
     parser.add_argument('--patience', type=int, default=100, help='EarlyStopping patience (epochs without improvement)')
     parser.add_argument('--freeze', type=int, default=0, help='Number of layers to freeze. backbone=10, all=24')
     parser.add_argument('--save-period', type=int, default=-1, help='Save checkpoint every x epochs (disabled if < 1)')
     parser.add_argument('--local_rank', type=int, default=-1, help='DDP parameter, do not modify')
     parser.add_argument('--enable_seg', action='store_true', help='open mask data output')
     parser.add_argument('--mask-conf-threshold', type=float, default=0.5)
-    parser.add_argument('--mask_loss_type', type=str, default='focalloss',
+    parser.add_argument('--mask_loss_type', type=str, default='dice',
                         help='there are ["bce", "dice", "dicebce", "focalloss"] mask loss type')
     parser.add_argument('--ann-coco-path', type=str, default='/nfs/Workspace/defect_data/defect_seg_dataset/jsons/val_ann_coco.json', \
                         help='path to save ground truth annotation of COCO format')

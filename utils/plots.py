@@ -251,10 +251,8 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, mas
                     artifact_enlarge_space = 5
                     box = [b - artifact_enlarge_space if i <= 1 else b + artifact_enlarge_space for i, b in enumerate(box)]
                     annotator.box_label(box, label, color=color)
-                if masks is not None:
-                    # if is_pred:
-                    #     breakpoint()
-                    annotator.crop_mask(mosaic_mask, box, no_crop=False, is_pred=is_pred)
+                    if masks is not None:
+                        annotator.crop_mask(mosaic_mask, box, no_crop=False, is_pred=is_pred)
     annotator.im.save(fname)  # save
 
 
