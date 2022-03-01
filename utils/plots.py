@@ -246,7 +246,7 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, mas
                 color = colors(cls)
                 cls = names[cls] if names else cls
                 if labels or conf[j] > 0.25:  # 0.25 conf thresh
-                    label = f'{cls}' if labels else f'{cls} {conf[j]:.1f}'
+                    label = f'{cls}' if labels else f'{cls} {conf[j]:.2f}'
                     # Increase a bit the bbox for visualization only
                     artifact_enlarge_space = 5
                     box = [b - artifact_enlarge_space if i <= 1 else b + artifact_enlarge_space for i, b in enumerate(box)]

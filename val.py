@@ -7,6 +7,7 @@ Usage:
 """
 
 import argparse
+from builtins import breakpoint
 import json
 import os
 import sys
@@ -282,19 +283,22 @@ def run(data,
             callbacks.run('on_val_image_end', pred, predn, path, names, img[si])
 
         # Plot images
-        if plots and batch_i < 3:
+        if plots:
             if not enable_seg:
                 masks = None
                 proto_out = None
             f = save_dir / f'val_batch{batch_i}_labels.jpg'  # labels
-            Thread(target=plot_images, args=(img, targets, paths, f, names, masks), daemon=True).start()
-            # plot_images(img, targets, paths, f, names, masks)
+            if training:
+                Thread(target=plot_images, args=(img, targets, paths, f, names, masks), daemon=True).start()
+            else:
+                plot_images(img, targets, None, f, names, masks)
             f = save_dir / f'val_batch{batch_i}_pred.jpg'  # predictions
-            Thread(target=plot_images, args=(img, output_to_target(out),
-                                             paths, f, names, proto_out, 1920, 16, True, mask_conf_threshold), daemon=True).start()
-            # 
-            # plot_images(img, output_to_target(out), paths, f, names, proto_out, 1920, 16, True, mask_conf_threshold)
-            # breakpoint()
+            if training:
+                Thread(target=plot_images, args=(img, output_to_target(out),
+                                                paths, f, names, proto_out,
+                                                1920, 16, True, mask_conf_threshold), daemon=True).start()
+            else:
+              plot_images(img, output_to_target(out), None, f, {0: 'Defect'}, proto_out, 1920, 16, True, mask_conf_threshold)  
 
     # Compute statistics
     stats = [np.concatenate(x, 0) for x in zip(*stats)]  # to numpy
@@ -390,7 +394,8 @@ def parse_opt():
     parser = argparse.ArgumentParser()
     parser.add_argument('--data', type=str, default=ROOT / 'data/green_data.yaml', help='dataset.yaml path')
     parser.add_argument('--cfg', type=str, default=ROOT / 'models/yolov5s_seg.yaml', help='model.yaml path')
-    parser.add_argument('--weights', nargs='+', type=str, default=ROOT / 'runs/new_seg/train/exp/weights/last.pt', help='model.pt path(s)')
+    #parser.add_argument('--weights', nargs='+', type=str, default=ROOT / 'runs/new_seg/train/exp/weights/last.pt', help='model.pt path(s)')
+    parser.add_argument('--weights', nargs='+', type=str, default=ROOT / 'runs/multi_step/train/exp21/weights/last.pt', help='model.pt path(s)')
     parser.add_argument('--batch-size', type=int, default=32, help='batch size')
     parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=608, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.001, help='confidence threshold')

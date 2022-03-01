@@ -398,8 +398,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                                            enable_seg=opt.enable_seg,
                                            mask_conf_threshold=opt.mask_conf_threshold,
                                            ann_coco_path=opt.ann_coco_path,
-                                           opt=opt,
-                                           bbox_conf4seg=opt.bbox_conf4seg)
+                                           opt=opt)
                 if opt.enable_seg:
                     maps, miou = maps
 
@@ -407,8 +406,9 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             fi = fitness(np.array(results).reshape(1, -1))  # weighted combination of [P, R, mAP@.5, mAP@.5-.95]
             if fi > best_fitness:
                 best_fitness = fi
-            if opt.enable_seg and miou > best_miou and not noval:
-                best_miou = miou
+            if not noval:
+                if opt.enable_seg and miou > best_miou:
+                    best_miou = miou
             log_vals = list(mloss) + list(results) + lr
             callbacks.run('on_fit_epoch_end', log_vals, epoch, best_fitness, fi)
 
@@ -424,10 +424,13 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
                 # Save last, best and delete
                 torch.save(ckpt, last)
-                if best_fitness == fi and not opt.enable_seg:
-                    torch.save(ckpt, best)
-                elif best_miou == miou and opt.enable_seg and not noval:
-                    torch.save(ckpt, best)
+                if not opt.enable_seg:
+                    if best_fitness == fi:
+                        torch.save(ckpt, best)
+                else:
+                    if not noval:
+                        if best_miou == miou:
+                            torch.save(ckpt, best)
                 if (epoch > 0) and (opt.save_period > 0) and (epoch % opt.save_period == 0):
                     torch.save(ckpt, w / f'epoch{epoch}.pt')
                 del ckpt
@@ -472,8 +475,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                                             enable_seg=opt.enable_seg,
                                             mask_conf_threshold=opt.mask_conf_threshold,
                                             ann_coco_path=opt.ann_coco_path,
-                                            opt=opt,
-                                            bbox_conf4seg=opt.bbox_conf4seg)
+                                            opt=opt)
 
         callbacks.run('on_train_end', last, best, plots, epoch)
         LOGGER.info(f"Results saved to {colorstr('bold', save_dir)}")
